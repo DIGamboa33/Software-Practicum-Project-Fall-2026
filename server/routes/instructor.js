@@ -944,5 +944,364 @@ instructorRouter.post("/classrooms/:classroomId/assignments", async (request, re
     return response.status(500).json({ message: "Unable to assign this case." });
   }
 });
+// GET /api/instructor/patients
+// Retrieve existing patients with their demographic records.
+instructorRouter.get("/patients", async (request, response) => {
+  try {
+    const context = await requireInstructor(request, response);
+    if (!context) return;
+
+    const admin = context.supabaseAdmin;
+
+    const { data: patientRecords, error: recordsError } =
+      await admin
+        .from("patient_records")
+        .select(
+          "id, profile_id, date_of_birth, sex, phone, address, created_at"
+        )
+        .order("created_at", { ascending: false });
+
+    if (recordsError) throw recordsError;
+
+    if (!patientRecords?.length) {
+      return response.json({ patients: [] });
+    }
+
+    const profileIds = [
+      ...new Set(
+        patientRecords
+          .map((record) => record.profile_id)
+          .filter(Boolean)
+      ),
+    ];
+
+    const { data: profiles, error: profilesError } =
+      profileIds.length
+        ? await admin
+            .from("profiles")
+            .select(
+              "id, first_name, last_name, careflow_id, roles(name)"
+            )
+            .in("id", profileIds)
+        : { data: [], error: null };
+
+    if (profilesError) throw profilesError;
+
+    const profilesById = new Map(
+      (profiles || [])
+        .filter(
+          (profile) =>
+            relationName(profile.roles) === "Patient"
+        )
+        .map((profile) => [profile.id, profile])
+    );
+
+    const patients = patientRecords
+      .filter((record) =>
+        profilesById.has(record.profile_id)
+      )
+      .map((record) => {
+        const profile = profilesById.get(record.profile_id);
+
+        return {
+          id: record.id,
+          profileId: record.profile_id,
+          name: [
+            profile.first_name,
+            profile.last_name,
+          ]
+            .filter(Boolean)
+            .join(" "),
+          careflowId: profile.careflow_id,
+          dateOfBirth: record.date_of_birth,
+          sex: record.sex,
+          phone: record.phone,
+          address: record.address,
+          createdAt: record.created_at,
+        };
+      });
+
+    return response.json({ patients });
+  } catch (error) {
+    console.error("Unable to load instructor patients:", error);
+
+    return response.status(500).json({
+      message: "Unable to load patients.",
+    });
+  }
+});
+
+
+instructorRouter.post("/patients", async (request, response) => {
+  try {
+    const context = await requireInstructor(request, response);
+    if (!context) return;
+
+    const admin = context.supabaseAdmin;
+
+    const firstName = String(
+      request.body?.firstName || ""
+    ).trim();
+
+    const lastName = String(
+      request.body?.lastName || ""
+    ).trim();
+
+    const dateOfBirth = String(
+      request.body?.dateOfBirth || ""
+    ).trim();
+
+    const sex = String(
+      request.body?.sex || ""
+    ).trim();
+
+    const phone = String(
+      request.body?.phone || ""
+    ).trim();
+
+    const address = String(
+      request.body?.address || ""
+    ).trim();
+
+    if (!firstName || !lastName || !dateOfBirth || !sex) {
+      return response.status(400).json({
+        message:
+          "First name, last name, date of birth, and sex are required.",
+      });
+    }
+
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth) ||
+      Number.isNaN(Date.parse(`${dateOfBirth}T00:00:00Z`)) ||
+      dateOfBirth > new Date().toISOString().slice(0, 10)
+    ) {
+      return response.status(400).json({
+        message: "Enter a valid date of birth.",
+      });
+    }
+
+    if (!["Female", "Male", "Other"].includes(sex)) {
+      return response.status(400).json({
+        message: "Select a valid sex.",
+      });
+    }
+
+    const { data: patientRole, error: roleError } =
+      await admin
+        .from("roles")
+        .select("id")
+        .eq("name", "Patient")
+        .single();
+
+    if (roleError || !patientRole) {
+      return response.status(500).json({
+        message: "Patient role is not configured.",
+      });
+    }
+
+    const { randomBytes, randomUUID } =
+      await import("node:crypto");
+
+    const email = `simulated.${randomUUID()}@careflow.test`;
+    const password = randomBytes(32).toString("base64url");
+
+    const { data: authData, error: authError } =
+      await admin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          first_name: firstName,
+          last_name: lastName,
+          display_name: `${firstName} ${lastName}`,
+          simulated_patient: true,
+        },
+      });
+
+    if (authError || !authData?.user) {
+      return response.status(500).json({
+        message:
+          authError?.message ||
+          "Unable to create patient account.",
+      });
+    }
+
+    const profileId = authData.user.id;
+
+    try {
+      const { error: profileError } =
+        await admin.from("profiles").insert({
+          id: profileId,
+          first_name: firstName,
+          last_name: lastName,
+          role_id: patientRole.id,
+        });
+
+      if (profileError) throw profileError;
+
+      const { data: patientRecord, error: recordError } =
+        await admin
+          .from("patient_records")
+          .insert({
+            profile_id: profileId,
+            date_of_birth: dateOfBirth,
+            sex,
+            phone: phone || null,
+            address: address || null,
+          })
+          .select("id, profile_id")
+          .single();
+
+      if (recordError) throw recordError;
+
+      return response.status(201).json({
+        message: "Patient created successfully.",
+        patient: {
+          id: patientRecord.id,
+          profileId: patientRecord.profile_id,
+          name: `${firstName} ${lastName}`,
+        },
+      });
+    } catch (creationError) {
+
+      const { error: cleanupError } =
+        await admin.auth.admin.deleteUser(profileId);
+
+      if (cleanupError) {
+        console.error(
+          "Patient creation rollback failed:",
+          cleanupError
+        );
+      }
+
+      throw creationError;
+    }
+  } catch (error) {
+    console.error("Unable to create instructor patient:", error);
+
+    return response.status(500).json({
+      message: "Unable to create patient.",
+    });
+  }
+});
+
+instructorRouter.get("/patients/:patientId", async (request, response) => {
+  try {
+    const context = await requireInstructor(request, response);
+    if (!context) return;
+
+    const admin = context.supabaseAdmin;
+    const patientRecordId = request.params.patientId;
+
+    const { data: patientRecord, error: recordError } = await admin
+      .from("patient_records")
+      .select("*")
+      .eq("id", patientRecordId)
+      .maybeSingle();
+
+    if (recordError) throw recordError;
+
+    if (!patientRecord) {
+      return response.status(404).json({
+        message: "Patient not found.",
+      });
+    }
+
+    const profileId = patientRecord.profile_id;
+
+    if (!profileId) {
+      return response.status(404).json({
+        message: "Patient profile not found.",
+      });
+    }
+
+    const { data: profile, error: profileError } = await admin
+      .from("profiles")
+      .select("id, first_name, last_name, careflow_id, roles(name)")
+      .eq("id", profileId)
+      .maybeSingle();
+
+    if (profileError) throw profileError;
+
+    if (!profile || relationName(profile.roles) !== "Patient") {
+      return response.status(404).json({
+        message: "Patient profile not found.",
+      });
+    }
+
+    const portal = admin.schema("patient_portal");
+
+    const [
+      medicationsResult,
+      allergiesResult,
+      historyResult,
+      appointmentsResult,
+      vitalsResult,
+    ] = await Promise.all([
+      portal
+        .from("medications")
+        .select("*")
+        .eq("patient_id", profileId),
+
+      portal
+        .from("allergies")
+        .select("*")
+        .eq("profile_id", profileId),
+
+      portal
+        .from("medical_history")
+        .select("*")
+        .eq("profile_id", profileId),
+
+      portal
+        .from("appointments")
+        .select("*")
+        .eq("patient_id", profileId),
+
+      portal
+        .from("vitals")
+        .select("*")
+        .eq("patient_id", profileId),
+    ]);
+
+    const queryError =
+      medicationsResult.error ||
+      allergiesResult.error ||
+      historyResult.error ||
+      appointmentsResult.error ||
+      vitalsResult.error;
+
+    if (queryError) throw queryError;
+
+    return response.json({
+      patient: {
+        id: patientRecord.id,
+        profileId,
+        name: [
+          profile.first_name,
+          profile.last_name,
+        ].filter(Boolean).join(" "),
+        careflowId: profile.careflow_id,
+        dateOfBirth: patientRecord.date_of_birth,
+        sex: patientRecord.sex,
+        phone: patientRecord.phone,
+        address: patientRecord.address,
+
+        medications: medicationsResult.data || [],
+        allergies: allergiesResult.data || [],
+        medicalHistory: historyResult.data || [],
+        appointments: appointmentsResult.data || [],
+        vitals: vitalsResult.data || [],
+      },
+    });
+  } catch (error) {
+    console.error("Unable to load patient details:", error);
+
+    return response.status(500).json({
+      message: "Unable to load patient clinical records.",
+    });
+  }
+});
+
 
 export default instructorRouter;

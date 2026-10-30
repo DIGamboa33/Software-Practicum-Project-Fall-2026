@@ -1,146 +1,275 @@
-
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import Icon from "../components/Icon";
+import PharmacyNotesPage from "./PharmacyNotesPage";
 import {
   fetchStudentCases,
-  fetchStudentNote,
+  fetchStudentPharmacyNotes,
   updateStudentCaseStatus,
 } from "../lib/api";
-import { noteStatusLabel } from "../lib/noteStatus";
-import InstructorFeedback from "../components/InstructorFeedback";
 
-const statusOrder = [
-  "Scheduled",
-  "Checked in",
-  "Roomed",
-  "In progress",
-  "Checked out",
-];
+const tabs = ["Overview", "Medications", "Labs", "Notes", "Appointments", "Referrals"];
 
-const statusLabels = {
+const statuses = ["Scheduled", "Checked in", "Roomed", "In progress", "Checked out"];
+
+const actions = {
   Scheduled: "Check In",
   "Checked in": "Mark as Roomed",
   Roomed: "Start Encounter",
   "In progress": "Check Out",
 };
 
-function StudentCaseDetailPage({ selectedCaseId, onNavigate }) {
-  const [searchParams] = useSearchParams();
-  const caseId = searchParams.get("id") ?? selectedCaseId;
+const text = (value) =>
+  value == null || value === "" ? "Not recorded" : String(value);
 
-  const [activeTab, setActiveTab] = useState("case");
-  const [patientCase, setPatientCase] = useState(null);
-  const [savedNote, setSavedNote] = useState(null);
+const formattedDate = (value) => {
+  if (!value) return "Not recorded";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString();
+};
+
+const ordered = (values, keys) =>
+  Array.isArray(values)
+    ? [...values].sort((a, b) => {
+        const time = (item) =>
+          new Date(keys.map((key) => item?.[key]).find(Boolean) || 0).getTime() || 0;
+        return time(b) - time(a);
+      })
+    : [];
+
+function Value({ value }) {
+  if (value == null || value === "") return "Not recorded";
+
+  if (Array.isArray(value)) {
+    return value.length ? (
+      <ul>
+        {value.map((item, index) => (
+          <li key={item?.id ?? index}>
+            <Value value={item} />
+          </li>
+        ))}
+      </ul>
+    ) : "Not recorded";
+  }
+
+  if (typeof value === "object") {
+    if (value.name || value.label || value.medication_name) {
+      return value.name || value.label || value.medication_name;
+    }
+
+    return (
+      <dl>
+        {Object.entries(value).map(([key, item]) => (
+          <div key={key}>
+            <dt>{key.replaceAll("_", " ")}</dt>
+            <dd><Value value={item} /></dd>
+          </div>
+        ))}
+      </dl>
+    );
+  }
+
+  return String(value);
+}
+
+function Card({ title, children, action }) {
+  return (
+    <section className="panel data-panel case-section">
+      <div className="case-section-heading">
+        <h2>{title}</h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Row({ label, value }) {
+  return (
+    <div className="detail-field">
+      <dt>{label}</dt>
+      <dd><Value value={value} /></dd>
+    </div>
+  );
+}
+
+function DataTable({ columns, rows }) {
+  if (!rows.length) {
+    return <p className="case-help-text">No records available.</p>;
+  }
+
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            {columns.map(([name]) => <th key={name}>{name}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((item, index) => (
+            <tr key={item.id ?? index}>
+              {columns.map(([name, render]) => (
+                <td key={name}>{render(item)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export default function StudentCaseDetailPage({
+  selectedCaseId,
+  onNavigate,
+  user,
+}) {
+  const [params] = useSearchParams();
+
+  const caseId =
+    params.get("id") ??
+    params.get("caseId") ??
+    selectedCaseId;
+
+  const [patient, setPatient] = useState(null);
+  const [tab, setTab] = useState("Overview");
+  const [collapsed, setCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
   const [error, setError] = useState("");
-  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [noteCount, setNoteCount] = useState(0);
 
   useEffect(() => {
-    let isCurrent = true;
+    let active = true;
 
-    async function loadCase() {
-      setLoading(true);
-      setError("");
-      setPatientCase(null);
-      setSavedNote(null);
-      setActiveTab("case");
+    setLoading(true);
+    setError("");
+    setPatient(null);
+    setTab("Overview");
 
+    async function loadPatient() {
       try {
-        if (caseId == null) return;
+        if (caseId == null) throw new Error("No case selected.");
 
-        const cases = await fetchStudentCases();
-        if (!isCurrent) return;
+        const result = await fetchStudentCases();
+        const cases = Array.isArray(result) ? result : result?.cases || [];
 
-        const selected = cases.find(
-          (item) => String(item.id) === String(caseId)
-        );
+        const selected =
+          cases.find((item) => String(item.id) === String(caseId)) ||
+          cases.find((item) => String(item.assignment_id) === String(caseId));
 
-        setPatientCase(selected ?? null);
-
-        if (!selected?.assignment_id) return;
-
-        const note = await fetchStudentNote(
-          selected.assignment_id
-        );
-
-        if (!isCurrent) return;
-
-        setSavedNote(note);
+        if (!selected) throw new Error("Case not found.");
+        if (active) setPatient(selected);
       } catch (err) {
-        if (isCurrent) setError(err.message);
+        if (active) setError(err.message || "Unable to load patient.");
       } finally {
-        if (isCurrent) setLoading(false);
+        if (active) setLoading(false);
       }
     }
 
-    loadCase();
+    loadPatient();
 
     return () => {
-      isCurrent = false;
+      active = false;
     };
   }, [caseId]);
 
-  function navigateTo(page) {
-    onNavigate(page, { caseId: patientCase.id });
-  }
-
-  async function advanceStatus() {
-    const currentStatus =
-      patientCase.encounter_status ??
-      patientCase.starting_encounter_status;
-
-    const index = statusOrder.indexOf(currentStatus);
-
-    if (
-      updatingStatus ||
-      index < 0 ||
-      index >= statusOrder.length - 1 ||
-      currentStatus === "In progress"
-    ) {
+  useEffect(() => {
+    if (!patient) {
+      setNoteCount(0);
       return;
     }
 
+    let active = true;
+
+    const assignmentId = patient.assignment_id;
+
+    async function updateCount() {
+      if (!assignmentId) {
+        if (active) setNoteCount(0);
+        return;
+      }
+
+      try {
+        const result = await fetchStudentPharmacyNotes(assignmentId);
+
+        const notes = Array.isArray(result)
+          ? result
+          : result?.notes || [];
+
+        if (active) {
+          setNoteCount(notes.length);
+        }
+      } catch (error) {
+        console.error("Unable to load note count:", error);
+
+        if (active) {
+          setNoteCount(0);
+        }
+      }
+    }
+
+    updateCount();
+
+    const handleNotesUpdated = () => {
+      updateCount();
+    };
+
+    window.addEventListener("focus", handleNotesUpdated);
+    window.addEventListener("notes-updated", handleNotesUpdated);
+
+    return () => {
+      active = false;
+
+      window.removeEventListener("focus", handleNotesUpdated);
+      window.removeEventListener("notes-updated", handleNotesUpdated);
+    };
+  }, [patient?.assignment_id, tab]);
+
+  async function advanceStatus() {
+    const current =
+      patient?.encounter_status ??
+      patient?.starting_encounter_status ??
+      "Scheduled";
+
+    const index = statuses.indexOf(current);
+
+    if (updating || index < 0 || index >= statuses.length - 1) return;
+
+    setUpdating(true);
+    setError("");
+
     try {
-      setUpdatingStatus(true);
-      setError("");
+      const next = statuses[index + 1];
 
-      const nextStatus = statusOrder[index + 1];
+      await updateStudentCaseStatus(patient.assignment_id, next);
 
-      await updateStudentCaseStatus(
-        patientCase.assignment_id,
-        nextStatus
-      );
-
-      setPatientCase((current) => ({
-        ...current,
-        encounter_status: nextStatus,
+      setPatient((previous) => ({
+        ...previous,
+        encounter_status: next,
       }));
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Unable to update encounter status.");
     } finally {
-      setUpdatingStatus(false);
+      setUpdating(false);
     }
   }
 
   if (loading) {
     return (
       <div className="dashboard-page content-page">
-        <p role="status">Loading case...</p>
+        Loading patient record...
       </div>
     );
   }
 
-  if (!patientCase) {
+  if (!patient) {
     return (
       <div className="dashboard-page content-page">
-        {error && <p role="alert">{error}</p>}
-        <p>Case not found.</p>
-
+        <p role="alert">{error || "Case not found."}</p>
         <button
           className="secondary-button"
-          type="button"
-          onClick={() => onNavigate("overview")}
+          onClick={() => onNavigate?.("overview")}
         >
           Back to My Cases
         </button>
@@ -148,297 +277,668 @@ function StudentCaseDetailPage({ selectedCaseId, onNavigate }) {
     );
   }
 
-  const encounterStatus =
-    patientCase.encounter_status ??
-    patientCase.starting_encounter_status ??
+  const encounter =
+    patient.encounter_status ??
+    patient.starting_encounter_status ??
     "Scheduled";
 
-  const encounterInProgress =
-    encounterStatus === "In progress";
+  const labs = ordered(patient.labs, [
+    "collected_at",
+    "recorded_at",
+    "date",
+  ]);
 
-  const noteStatus = savedNote?.status || "Not started";
-  const hasNote = Boolean(savedNote);
+  const appointments = Array.isArray(patient.appointments)
+    ? patient.appointments
+    : [];
 
-  const readyForReview = encounterInProgress && hasNote;
+  const referrals = Array.isArray(patient.referrals)
+    ? patient.referrals
+    : [];
 
-  const details = [
-    ["Age", patientCase.patient_age ?? "Not provided"],
-    ["Sex", patientCase.patient_sex || "Not provided"],
-    ["Chief Complaint", patientCase.chief_complaint || "Not provided"],
-    ["Medical History", patientCase.history || "Not provided"],
-    ["Current Medications", patientCase.medications],
-    ["Allergies", patientCase.allergies],
-    ["Results", patientCase.results || "No results available"],
+  const vitals = Array.isArray(patient.vitals)
+    ? ordered(patient.vitals, [
+        "recorded_at",
+        "measured_at",
+        "date",
+      ])[0]
+    : patient.vitals ?? patient.current_vitals;
+
+  const allergies = patient.allergies;
+
+  const categorized =
+    allergies &&
+    !Array.isArray(allergies) &&
+    typeof allergies === "object";
+
+  const allergyGroups = {
+    Medication:
+      patient.medication_allergies ??
+      (categorized ? allergies.medication ?? allergies.medications : null),
+    Food:
+      patient.food_allergies ??
+      (categorized ? allergies.food : null),
+    Environmental:
+      patient.environmental_allergies ??
+      (categorized ? allergies.environmental : null),
+  };
+
+  const hasCategories = Object.values(allergyGroups).some(
+    (value) => value != null
+  );
+
+  const nextAppointment =
+    [...appointments]
+      .filter((item) => {
+        const when = new Date(
+          item.scheduled_at ??
+          item.appointment_date ??
+          item.date
+        ).getTime();
+
+        return (
+          when >= Date.now() &&
+          !["cancelled", "canceled"].includes(
+            String(item.status || "").toLowerCase()
+          )
+        );
+      })
+      .sort((a, b) =>
+        new Date(a.scheduled_at ?? a.appointment_date ?? a.date) -
+        new Date(b.scheduled_at ?? b.appointment_date ?? b.date)
+      )[0] ?? patient.next_appointment;
+
+  const vitalsList = [
+    [
+      "Blood Pressure",
+      vitals?.blood_pressure ??
+        (vitals?.systolic != null && vitals?.diastolic != null
+          ? `${vitals.systolic}/${vitals.diastolic} mmHg`
+          : null),
+    ],
+    ["Heart Rate", vitals?.heart_rate ?? vitals?.pulse],
+    ["Temperature", vitals?.temperature],
+    ["Respiratory Rate", vitals?.respiratory_rate ?? vitals?.respirations],
+    ["Oxygen Saturation", vitals?.spo2 ?? vitals?.oxygen_saturation],
+    ["Weight", vitals?.weight],
   ];
 
-  function renderDetail(value) {
-    if (Array.isArray(value)) {
-      return value.length ? (
-        <ul>
-          {value.map((item, index) => (
-            <li key={index}>{item}</li>
-          ))}
-        </ul>
-      ) : (
-        "None listed"
-      );
-    }
-
-    return value ?? "Not provided";
-  }
+  const action = (target) => (
+    <button
+      type="button"
+      className="secondary-button"
+      onClick={() => setTab(target)}
+    >
+      View All
+    </button>
+  );
 
   return (
-    <div className="dashboard-page content-page">
-      {/* PATIENT HEADER */}
-      <section className="page-heading case-header">
+    <div
+      className="dashboard-page content-page"
+      style={{ paddingTop: 16 }}
+    >
+      <section
+        className="page-heading case-header"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 16,
+          marginBottom: 8,
+          padding: 0,
+        }}
+      >
         <div>
-          <p className="section-label">
-            Student Encounter · Case {patientCase.id}
+          <p
+            className="section-label"
+            style={{ margin: "0 0 4px" }}
+          >
+            Student Patient Record · Case {patient.id}
           </p>
 
-          <h1>{patientCase.patient_name}</h1>
+          <h1
+            style={{
+              margin: "0 0 4px",
+              fontSize: 28,
+              lineHeight: 1.2,
+            }}
+          >
+            {patient.patient_name}
+          </h1>
 
-          <p>
-            {patientCase.patient_age ?? "Age not provided"} years
-            {" · "}
-            {patientCase.patient_sex || "Sex not provided"}
-            {" · "}
-            {patientCase.title}
+          <p style={{ margin: 0, fontSize: 14 }}>
+            {text(patient.patient_age)} years ·{" "}
+            {text(patient.patient_sex)} · {patient.title}
           </p>
         </div>
 
         <button
-          className="secondary-button"
           type="button"
-          onClick={() => onNavigate("overview")}
+          className="secondary-button"
+          onClick={() => onNavigate?.("overview")}
+          style={{ flexShrink: 0 }}
         >
-          <Icon name="arrow" size={16} />
           Back to My Cases
         </button>
       </section>
 
-      {/* TABS AND ENCOUNTER STATUS */}
-      <div className="case-tabs-bar">
-        <nav className="case-tabs" aria-label="Case sections">
-          {[
-            ["case", "Case Information"],
-            ["notes", "Notes"],
-            ["orders", "Orders"],
-            ["review", "Review & Submit"],
-          ].map(([id, label]) => (
+      {error && <p role="alert">{error}</p>}
+
+      <div
+        className="patient-workspace"
+        style={{
+          display: "grid",
+          gridTemplateColumns: collapsed
+            ? "50px minmax(0, 1fr)"
+            : "150px minmax(0, 1fr)",
+          gap: 12,
+          alignItems: "start",
+          marginTop: 0,
+        }}
+      >
+        <aside
+          className="panel data-panel"
+          style={{
+            padding: collapsed ? "10px 5px" : "12px 8px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 4,
+              marginBottom: 12,
+            }}
+          >
+            {!collapsed && (
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: 13,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Patient Chart
+              </h2>
+            )}
+
             <button
-              key={id}
               type="button"
-              className={`case-tab ${
-                activeTab === id ? "case-tab--active" : ""
-              }`}
-              onClick={() => setActiveTab(id)}
-              aria-current={
-                activeTab === id ? "page" : undefined
+              className="secondary-button"
+              style={{
+                padding: "5px 7px",
+                minWidth: 26,
+              }}
+              onClick={() => setCollapsed(!collapsed)}
+              aria-label={
+                collapsed ? "Expand navigation" : "Collapse navigation"
               }
             >
-              {label}
+              {collapsed ? "»" : "«"}
             </button>
-          ))}
-        </nav>
-          <div className="case-encounter-status">
-            <span className="encounter-status-label">
-              Encounter Status:
-            </span>
+          </div>
 
-            <span className="status-badge">
-              {encounterStatus}
-            </span>
+          <nav
+            aria-label="Patient record sections"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 7,
+            }}
+          >
+            {tabs.map((item) => (
+              <button
+                key={item}
+                type="button"
+                className="patient-nav-button"
+                aria-current={tab === item ? "page" : undefined}
+                title={item}
+                onClick={() => setTab(item)}
+                style={{
+                  width: "100%",
+                  padding: "11px 8px",
+                  textAlign: collapsed ? "center" : "left",
+                  border: `1px solid ${
+                    tab === item ? "#16a78b" : "#e5e9f0"
+                  }`,
+                  borderRadius: 9,
+                  background: tab === item ? "#16a78b" : "#f7f9fc",
+                  color: tab === item ? "white" : "#53627b",
+                  fontWeight: tab === item ? 700 : 600,
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                {collapsed
+                  ? item[0]
+                  : item === "Notes"
+                    ? `Notes (${noteCount})`
+                    : item}
+              </button>
+            ))}
+          </nav>
+        </aside>
 
-          {statusLabels[encounterStatus] && (
-            <button
-              className="primary-button"
-              type="button"
-              onClick={advanceStatus}
-              disabled={updatingStatus || encounterInProgress}
-            >
-              {updatingStatus
-                ? "Updating..."
-                : statusLabels[encounterStatus]}
-            </button>
+        <main style={{ minWidth: 0 }}>
+          <section
+            className="panel data-panel"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 12,
+              padding: "10px 16px",
+              marginBottom: 12,
+            }}
+          >
+
+            <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+              <p
+                className="section-label"
+                style={{ margin: "0 0 4px", fontSize: 11 }}
+              >
+                Chief Complaint
+              </p>
+
+              <strong style={{ fontSize: 13 }}>
+                {text(patient.chief_complaint)}
+              </strong>
+            </div>
+
+            <div style={{ minWidth: 110 }}>
+              <p
+                className="section-label"
+                style={{ margin: "0 0 4px", fontSize: 11 }}
+              >
+                Encounter Status
+              </p>
+
+              <span className="status-badge">
+                {encounter}
+              </span>
+            </div>
+
+            {actions[encounter] && (
+              <button
+                type="button"
+                className="primary-button"
+                disabled={updating}
+                onClick={advanceStatus}
+                style={{
+                  padding: "8px 12px",
+                  fontSize: 12,
+                  flexShrink: 0,
+                }}
+              >
+                {updating ? "Updating..." : actions[encounter]}
+              </button>
+            )}
+          </section>
+
+          {tab === "Overview" && (
+            <>
+              <div
+                className="case-section-heading"
+                style={{ marginBottom: 12 }}
+              >
+                <div>
+                  <p
+                    className="section-label"
+                    style={{ margin: "0 0 4px" }}
+                  >
+                    Patient Overview
+                  </p>
+
+                  <h2 style={{ margin: 0 }}>
+                    Clinical Summary
+                  </h2>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(auto-fit, minmax(min(100%, 300px), 1fr))",
+                  gap: 16,
+                }}
+              >
+                <Card title="Demographics">
+                  <dl className="detail-form-grid">
+                    <Row label="Age" value={patient.patient_age} />
+                    <Row label="Sex" value={patient.patient_sex} />
+                    <Row
+                      label="Date of Birth"
+                      value={patient.date_of_birth ?? patient.dob}
+                    />
+                    <Row
+                      label="MRN"
+                      value={
+                        patient.mrn ??
+                        patient.medical_record_number
+                      }
+                    />
+                  </dl>
+                </Card>
+
+                <Card title="Allergies">
+                  {hasCategories ? (
+                    Object.entries(allergyGroups).map(([label, value]) => (
+                      <Row
+                        key={label}
+                        label={label}
+                        value={value}
+                      />
+                    ))
+                  ) : (
+                    <Value value={allergies} />
+                  )}
+                </Card>
+
+                <Card title="Diagnoses">
+                  <Value
+                    value={
+                      patient.diagnoses ??
+                      patient.diagnosis
+                    }
+                  />
+
+                  <p className="case-help-text">
+                    Provider-managed information.
+                  </p>
+                </Card>
+
+                <Card title="Current Vitals">
+                  {vitals ? (
+                    <>
+                      <dl className="detail-form-grid">
+                        {vitalsList.map(([label, value]) => (
+                          <Row
+                            key={label}
+                            label={label}
+                            value={value}
+                          />
+                        ))}
+                      </dl>
+
+                      <p className="case-help-text">
+                        Last recorded:{" "}
+                        {formattedDate(
+                          vitals.recorded_at ??
+                          vitals.measured_at ??
+                          vitals.date
+                        )}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="case-help-text">
+                      No vitals recorded.
+                    </p>
+                  )}
+                </Card>
+
+                <Card
+                  title="Recent Labs"
+                  action={action("Labs")}
+                >
+                  {labs.length ? (
+                    <dl className="detail-form-grid">
+                      {labs.slice(0, 5).map((lab, index) => (
+                        <Row
+                          key={lab.id ?? index}
+                          label={
+                            lab.test_name ??
+                            lab.name ??
+                            "Lab"
+                          }
+                          value={`${text(
+                            lab.result ?? lab.value
+                          )} ${lab.unit || ""}`}
+                        />
+                      ))}
+                    </dl>
+                  ) : (
+                    <p className="case-help-text">
+                      No structured labs recorded.
+                    </p>
+                  )}
+
+                  {patient.results && (
+                    <Row
+                      label="Existing Clinical Results"
+                      value={patient.results}
+                    />
+                  )}
+                </Card>
+
+                <Card
+                  title="Next Appointment"
+                  action={action("Appointments")}
+                >
+                  {nextAppointment ? (
+                    typeof nextAppointment === "object" ? (
+                      <dl className="detail-form-grid">
+                        <Row
+                          label="Appointment"
+                          value={
+                            nextAppointment.title ??
+                            nextAppointment.type ??
+                            "Appointment"
+                          }
+                        />
+
+                        <Row
+                          label="Date"
+                          value={formattedDate(
+                            nextAppointment.scheduled_at ??
+                            nextAppointment.appointment_date ??
+                            nextAppointment.date
+                          )}
+                        />
+
+                        <Row
+                          label="Provider"
+                          value={nextAppointment.provider}
+                        />
+                      </dl>
+                    ) : (
+                      <Value value={nextAppointment} />
+                    )
+                  ) : (
+                    <p className="case-help-text">
+                      No upcoming appointment.
+                    </p>
+                  )}
+                </Card>
+              </div>
+
+              <section
+                className="panel data-panel case-section"
+                style={{ marginTop: 16 }}
+              >
+                <h2>Additional Patient Information</h2>
+
+                <dl className="detail-form-grid">
+                  <Row
+                    label="Chief Complaint"
+                    value={patient.chief_complaint}
+                  />
+
+                  <Row
+                    label="Medical History"
+                    value={
+                      patient.medical_history ??
+                      patient.history
+                    }
+                  />
+
+                  <Row
+                    label="Surgical History"
+                    value={patient.surgical_history}
+                  />
+                </dl>
+              </section>
+            </>
           )}
-        </div>
-      </div>
 
-      {error && <p role="alert">{error}</p>}
-      <InstructorFeedback
-                feedback={
-                  ["Returned", "Approved"].includes(savedNote?.status)
-                    ? savedNote?.feedback
-                    : null
-                }
+          {tab === "Medications" && (
+            <Card title="Medications">
+              <Value value={patient.medications} />
+
+            </Card>
+          )}
+
+          {tab === "Labs" && (
+            <Card title="Laboratory Results">
+              <DataTable
+                rows={labs}
+                columns={[
+                  [
+                    "Test",
+                    (item) =>
+                      item.test_name ??
+                      item.name ??
+                      "Lab",
+                  ],
+                  [
+                    "Result",
+                    (item) =>
+                      `${text(
+                        item.result ?? item.value
+                      )} ${item.unit || ""}`,
+                  ],
+                  [
+                    "Reference Range",
+                    (item) =>
+                      text(item.reference_range),
+                  ],
+                  [
+                    "Date",
+                    (item) =>
+                      formattedDate(
+                        item.collected_at ??
+                        item.recorded_at ??
+                        item.date
+                      ),
+                  ],
+                ]}
               />
 
-      {/* CASE INFORMATION */}
-      {activeTab === "case" && (
-        <section className="panel data-panel case-section">
-          <h2>Case Information</h2>
-
-          <dl className="detail-form-grid">
-            {details.map(([label, value], index) => (
-              <div
-                className={`detail-field ${
-                  index > 1 ? "detail-field--wide" : ""
-                }`}
-                key={label}
-              >
-                <dt>{label}</dt>
-                <dd>{renderDetail(value)}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-      )}
-
-      {/* NOTES */}
-      {activeTab === "notes" && (
-        <section className="panel data-panel case-section">
-          <div className="case-section-heading">
-            <div>
-              <h2>Clinical Notes</h2>
-              <p>
-                {noteStatus === "Pending Review"
-                  ? "Your note has been submitted and is awaiting instructor review. It is locked until your instructor responds."
-                  : noteStatus === "Approved"
-                  ? "Your instructor approved this note."
-                  : noteStatus === "Returned"
-                  ? "Your instructor returned this note. Review the feedback above, revise, and submit again."
-                  : hasNote
-                  ? "You have a saved draft. Continue editing where you left off."
-                  : "No clinical note has been started for this encounter."}
-              </p>
-            </div>
-
-              <span className="status-badge">{noteStatusLabel(noteStatus)}</span>
-            
-          </div>
-
-          <dl className="detail-form-grid">
-            <div className="detail-field">
-              <dt>Note Type</dt>
-              <dd>SOAP Note</dd>
-            </div>
-
-            <div className="detail-field">
-              <dt>Status</dt>
-              <dd>{noteStatusLabel(noteStatus)}</dd>
-            </div>
-          </dl>
-
-          <div className="form-actions">
-            <button
-              className="primary-button"
-              type="button"
-              disabled={
-                        !encounterInProgress ||
-                        noteStatus === "Pending Review" ||
-                        noteStatus === "Approved"
-                      }
-              onClick={() => navigateTo("noteForm")}
-            >
-              {noteStatus === "Returned"
-                ? "Revise Note"
-                : hasNote
-                ? "Continue Note"
-                : "Start Note"}
-            </button>
-          </div>
-
-          {!encounterInProgress && (
-            <p className="case-help-text">
-              Start the encounter before editing clinical notes.
-            </p>
-          )}
-        </section>
-      )}
-
-      {/* ORDERS */}
-      {activeTab === "orders" && (
-        <section className="panel data-panel case-section">
-          <div className="case-section-heading">
-            <div>
-              <h2>Orders</h2>
-              <p>
-                Create and manage orders for this patient encounter.
-              </p>
-            </div>
-          </div>
-
-          <div className="form-actions">
-            <button
-              className="primary-button"
-              type="button"
-              disabled={
-                        !encounterInProgress ||
-                        noteStatus === "Pending Review" ||
-                        noteStatus === "Approved"
-                      }
-              onClick={() => navigateTo("orderEntry")}
-            >
-              Manage Orders
-            </button>
-          </div>
-
-          {!encounterInProgress && (
-            <p className="case-help-text">
-              Start the encounter before managing orders.
-            </p>
+              {patient.results && (
+                <Row
+                  label="Existing Clinical Results"
+                  value={patient.results}
+                />
+              )}
+            </Card>
           )}
 
-          {(noteStatus === "Pending Review" || noteStatus === "Approved") && (
-            <p className="case-help-text">
-              Orders are locked while your note is submitted or approved.
-            </p>
+          {tab === "Notes" && (
+            <PharmacyNotesPage
+              selectedCaseId={patient.id}
+              user={user}
+              onNavigate={onNavigate}
+              embedded
+            />
           )}
-        </section>
-      )}
 
-      {/* REVIEW & SUBMIT */}
-      {activeTab === "review" && (
-        <section className="panel data-panel case-section">
-          <div className="case-section-heading">
-            <div>
-              <h2>Review & Submit</h2>
-              <p>
-                Review your saved SOAP note before
-                submitting it for instructor review.
-              </p>
-            </div>
-          </div>
-
-          <dl className="detail-form-grid">
-            <div className="detail-field">
-              <dt>SOAP Note</dt>
-              <dd>{noteStatusLabel(noteStatus)}</dd>
-            </div>
-          </dl>
-
-          <div className="form-actions">
-            <button
-              className="primary-button"
-              type="button"
-              disabled={!readyForReview}
-              onClick={() => navigateTo("submission")}
-            >
-              Review Documentation
-            </button>
-          </div>
-
-          {!readyForReview && (
-            <p className="case-help-text">
-              Start the encounter and save a SOAP note
-              before reviewing.
-            </p>
+          {tab === "Appointments" && (
+            <Card title="Appointments">
+              <DataTable
+                rows={appointments}
+                columns={[
+                  [
+                    "Appointment",
+                    (item) =>
+                      item.title ??
+                      item.type ??
+                      "Appointment",
+                  ],
+                  [
+                    "Date",
+                    (item) =>
+                      formattedDate(
+                        item.scheduled_at ??
+                        item.appointment_date ??
+                        item.date
+                      ),
+                  ],
+                  [
+                    "Provider",
+                    (item) => text(item.provider),
+                  ],
+                  [
+                    "Status",
+                    (item) => text(item.status),
+                  ],
+                ]}
+              />
+            </Card>
           )}
-        </section>
-      )}
+
+          {tab === "Referrals" && (
+            <Card title="Referrals">
+              <DataTable
+                rows={referrals}
+                columns={[
+                  [
+                    "Specialty",
+                    (item) => text(item.specialty),
+                  ],
+                  [
+                    "Reason",
+                    (item) => text(item.reason),
+                  ],
+                  [
+                    "Status",
+                    (item) => text(item.status),
+                  ],
+                  [
+                    "Date",
+                    (item) =>
+                      formattedDate(
+                        item.created_at ??
+                        item.date
+                      ),
+                  ],
+                ]}
+              />
+            </Card>
+          )}
+        </main>
+      </div>
+
+      <style>{`
+        .patient-nav-button:hover:not([aria-current="page"]) {
+          background: #e7f6f1 !important;
+          color: #128b73 !important;
+          border-color: #b5e4d6 !important;
+        }
+
+        .patient-nav-button:focus-visible {
+          outline: 2px solid #16a78b;
+          outline-offset: 2px;
+        }
+
+        @media (max-width: 750px) {
+          .patient-workspace {
+            grid-template-columns: 1fr !important;
+          }
+
+          .patient-workspace nav {
+            flex-direction: row !important;
+            flex-wrap: wrap;
+          }
+
+          .patient-workspace nav button {
+            width: auto !important;
+            flex: 1 1 auto;
+          }
+        }
+      `}</style>
     </div>
   );
 }
-
-export default StudentCaseDetailPage;
