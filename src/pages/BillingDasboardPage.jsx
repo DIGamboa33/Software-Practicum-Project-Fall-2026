@@ -130,7 +130,7 @@ export default function BillingDashboardPage() {
         ))}
       </section>
 
-      {/* Tabs navigation using roster-controls__tabs / roster-view-button */}
+      {/* Tabs navigation */}
       <section className="panel classroom-health-panel" style={{ padding: '14px 20px', marginBottom: '18px' }}>
         <div className="roster-controls" style={{ background: 'transparent', border: 'none', padding: 0 }}>
           <div className="roster-controls__tabs">
