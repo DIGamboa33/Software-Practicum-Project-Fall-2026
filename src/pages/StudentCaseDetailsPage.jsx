@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import PharmacyNotesPage from "./PharmacyNotesPage";
@@ -7,40 +8,65 @@ import {
   updateStudentCaseStatus,
 } from "../lib/api";
 
-const tabs = ["Overview", "Medications", "Labs", "Notes", "Appointments", "Referrals"];
+const TABS = [
+  "Overview",
+  "Medications",
+  "Labs",
+  "Notes",
+  "Appointments",
+  "Referrals",
+];
 
-const statuses = ["Scheduled", "Checked in", "Roomed", "In progress", "Checked out"];
+const STATUSES = [
+  "Scheduled",
+  "Checked in",
+  "Roomed",
+  "In progress",
+  "Checked out",
+];
 
-const actions = {
+const ACTIONS = {
   Scheduled: "Check In",
   "Checked in": "Mark as Roomed",
   Roomed: "Start Encounter",
   "In progress": "Check Out",
 };
 
-const text = (value) =>
-  value == null || value === "" ? "Not recorded" : String(value);
+const MINT = "#78e3d1";
 
-const formattedDate = (value) => {
+function display(value) {
+  return value == null || value === ""
+    ? "Not recorded"
+    : String(value);
+}
+
+function formatDate(value) {
   if (!value) return "Not recorded";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString();
-};
 
-const ordered = (values, keys) =>
-  Array.isArray(values)
-    ? [...values].sort((a, b) => {
-        const time = (item) =>
-          new Date(keys.map((key) => item?.[key]).find(Boolean) || 0).getTime() || 0;
-        return time(b) - time(a);
-      })
-    : [];
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? String(value)
+    : date.toLocaleDateString();
+}
+
+function sortRecent(items, keys) {
+  if (!Array.isArray(items)) return [];
+
+  const getTime = (item) => {
+    const value = keys.map((key) => item?.[key]).find(Boolean);
+    return new Date(value || 0).getTime() || 0;
+  };
+
+  return [...items].sort((a, b) => getTime(b) - getTime(a));
+}
 
 function Value({ value }) {
   if (value == null || value === "") return "Not recorded";
 
   if (Array.isArray(value)) {
-    return value.length ? (
+    if (!value.length) return "Not recorded";
+
+    return (
       <ul>
         {value.map((item, index) => (
           <li key={item?.id ?? index}>
@@ -48,22 +74,25 @@ function Value({ value }) {
           </li>
         ))}
       </ul>
-    ) : "Not recorded";
+    );
   }
 
   if (typeof value === "object") {
-    if (value.name || value.label || value.medication_name) {
-      return value.name || value.label || value.medication_name;
-    }
-
     return (
       <dl>
-        {Object.entries(value).map(([key, item]) => (
-          <div key={key}>
-            <dt>{key.replaceAll("_", " ")}</dt>
-            <dd><Value value={item} /></dd>
-          </div>
-        ))}
+        {Object.entries(value)
+          .filter(
+            ([key]) =>
+              !["id", "patient_id", "profile_id"].includes(key)
+          )
+          .map(([key, item]) => (
+            <div key={key}>
+              <dt>{key.replaceAll("_", " ")}</dt>
+              <dd>
+                <Value value={item} />
+              </dd>
+            </div>
+          ))}
       </dl>
     );
   }
@@ -71,9 +100,15 @@ function Value({ value }) {
   return String(value);
 }
 
-function Card({ title, children, action }) {
+function Card({ title, action, fullWidth = false, children }) {
   return (
-    <section className="panel data-panel case-section">
+    <section
+      className="panel data-panel case-section"
+      style={{
+        gridColumn: fullWidth ? "1 / -1" : undefined,
+        minWidth: 0,
+      }}
+    >
       <div className="case-section-heading">
         <h2>{title}</h2>
         {action}
@@ -87,7 +122,9 @@ function Row({ label, value }) {
   return (
     <div className="detail-field">
       <dt>{label}</dt>
-      <dd><Value value={value} /></dd>
+      <dd>
+        <Value value={value} />
+      </dd>
     </div>
   );
 }
@@ -102,14 +139,18 @@ function DataTable({ columns, rows }) {
       <table>
         <thead>
           <tr>
-            {columns.map(([name]) => <th key={name}>{name}</th>)}
+            {columns.map(([label]) => (
+              <th key={label} scope="col">
+                {label}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {rows.map((item, index) => (
             <tr key={item.id ?? index}>
-              {columns.map(([name, render]) => (
-                <td key={name}>{render(item)}</td>
+              {columns.map(([label, render]) => (
+                <td key={label}>{render(item)}</td>
               ))}
             </tr>
           ))}
@@ -149,19 +190,28 @@ export default function StudentCaseDetailPage({
 
     async function loadPatient() {
       try {
-        if (caseId == null) throw new Error("No case selected.");
+        if (caseId == null) {
+          throw new Error("No case selected.");
+        }
 
         const result = await fetchStudentCases();
-        const cases = Array.isArray(result) ? result : result?.cases || [];
+        const cases = Array.isArray(result)
+          ? result
+          : result?.cases ?? [];
 
-        const selected =
-          cases.find((item) => String(item.id) === String(caseId)) ||
-          cases.find((item) => String(item.assignment_id) === String(caseId));
+        const selected = cases.find(
+          (item) =>
+            String(item.id) === String(caseId) ||
+            String(item.assignment_id) === String(caseId)
+        );
 
         if (!selected) throw new Error("Case not found.");
+
         if (active) setPatient(selected);
       } catch (err) {
-        if (active) setError(err.message || "Unable to load patient.");
+        if (active) {
+          setError(err.message || "Unable to load patient.");
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -175,54 +225,39 @@ export default function StudentCaseDetailPage({
   }, [caseId]);
 
   useEffect(() => {
-    if (!patient) {
+    const assignmentId = patient?.assignment_id;
+
+    if (!assignmentId) {
       setNoteCount(0);
       return;
     }
 
     let active = true;
 
-    const assignmentId = patient.assignment_id;
-
-    async function updateCount() {
-      if (!assignmentId) {
-        if (active) setNoteCount(0);
-        return;
-      }
-
+    async function loadNoteCount() {
       try {
-        const result = await fetchStudentPharmacyNotes(assignmentId);
+        const result =
+          await fetchStudentPharmacyNotes(assignmentId);
 
         const notes = Array.isArray(result)
           ? result
-          : result?.notes || [];
+          : result?.notes ?? [];
 
-        if (active) {
-          setNoteCount(notes.length);
-        }
-      } catch (error) {
-        console.error("Unable to load note count:", error);
-
-        if (active) {
-          setNoteCount(0);
-        }
+        if (active) setNoteCount(notes.length);
+      } catch (err) {
+        console.error("Unable to load notes:", err);
+        if (active) setNoteCount(0);
       }
     }
 
-    updateCount();
-
-    const handleNotesUpdated = () => {
-      updateCount();
-    };
-
-    window.addEventListener("focus", handleNotesUpdated);
-    window.addEventListener("notes-updated", handleNotesUpdated);
+    loadNoteCount();
+    window.addEventListener("focus", loadNoteCount);
+    window.addEventListener("notes-updated", loadNoteCount);
 
     return () => {
       active = false;
-
-      window.removeEventListener("focus", handleNotesUpdated);
-      window.removeEventListener("notes-updated", handleNotesUpdated);
+      window.removeEventListener("focus", loadNoteCount);
+      window.removeEventListener("notes-updated", loadNoteCount);
     };
   }, [patient?.assignment_id, tab]);
 
@@ -232,24 +267,35 @@ export default function StudentCaseDetailPage({
       patient?.starting_encounter_status ??
       "Scheduled";
 
-    const index = statuses.indexOf(current);
+    const index = STATUSES.indexOf(current);
 
-    if (updating || index < 0 || index >= statuses.length - 1) return;
+    if (
+      updating ||
+      index < 0 ||
+      index === STATUSES.length - 1
+    ) {
+      return;
+    }
 
     setUpdating(true);
     setError("");
 
     try {
-      const next = statuses[index + 1];
+      const next = STATUSES[index + 1];
 
-      await updateStudentCaseStatus(patient.assignment_id, next);
+      await updateStudentCaseStatus(
+        patient.assignment_id,
+        next
+      );
 
       setPatient((previous) => ({
         ...previous,
         encounter_status: next,
       }));
     } catch (err) {
-      setError(err.message || "Unable to update encounter status.");
+      setError(
+        err.message || "Unable to update encounter status."
+      );
     } finally {
       setUpdating(false);
     }
@@ -258,7 +304,7 @@ export default function StudentCaseDetailPage({
   if (loading) {
     return (
       <div className="dashboard-page content-page">
-        Loading patient record...
+        <p role="status">Loading patient record...</p>
       </div>
     );
   }
@@ -268,6 +314,7 @@ export default function StudentCaseDetailPage({
       <div className="dashboard-page content-page">
         <p role="alert">{error || "Case not found."}</p>
         <button
+          type="button"
           className="secondary-button"
           onClick={() => onNavigate?.("overview")}
         >
@@ -282,7 +329,7 @@ export default function StudentCaseDetailPage({
     patient.starting_encounter_status ??
     "Scheduled";
 
-  const labs = ordered(patient.labs, [
+  const labs = sortRecent(patient.labs, [
     "collected_at",
     "recorded_at",
     "date",
@@ -297,7 +344,7 @@ export default function StudentCaseDetailPage({
     : [];
 
   const vitals = Array.isArray(patient.vitals)
-    ? ordered(patient.vitals, [
+    ? sortRecent(patient.vitals, [
         "recorded_at",
         "measured_at",
         "date",
@@ -305,8 +352,10 @@ export default function StudentCaseDetailPage({
     : patient.vitals ?? patient.current_vitals;
 
   const allergies = patient.allergies;
+  const medicalHistory =
+    patient.medical_history ?? patient.history;
 
-  const categorized =
+  const categorizedAllergies =
     allergies &&
     !Array.isArray(allergies) &&
     typeof allergies === "object";
@@ -314,56 +363,81 @@ export default function StudentCaseDetailPage({
   const allergyGroups = {
     Medication:
       patient.medication_allergies ??
-      (categorized ? allergies.medication ?? allergies.medications : null),
+      (categorizedAllergies
+        ? allergies.medication ?? allergies.medications
+        : null),
     Food:
       patient.food_allergies ??
-      (categorized ? allergies.food : null),
+      (categorizedAllergies ? allergies.food : null),
     Environmental:
       patient.environmental_allergies ??
-      (categorized ? allergies.environmental : null),
+      (categorizedAllergies ? allergies.environmental : null),
   };
 
-  const hasCategories = Object.values(allergyGroups).some(
+  const hasAllergyGroups = Object.values(allergyGroups).some(
     (value) => value != null
   );
 
   const nextAppointment =
     [...appointments]
       .filter((item) => {
-        const when = new Date(
+        const date = new Date(
           item.scheduled_at ??
-          item.appointment_date ??
-          item.date
+            item.appointment_date ??
+            item.date
         ).getTime();
 
         return (
-          when >= Date.now() &&
+          date >= Date.now() &&
           !["cancelled", "canceled"].includes(
             String(item.status || "").toLowerCase()
           )
         );
       })
-      .sort((a, b) =>
-        new Date(a.scheduled_at ?? a.appointment_date ?? a.date) -
-        new Date(b.scheduled_at ?? b.appointment_date ?? b.date)
+      .sort(
+        (a, b) =>
+          new Date(
+            a.scheduled_at ?? a.appointment_date ?? a.date
+          ) -
+          new Date(
+            b.scheduled_at ?? b.appointment_date ?? b.date
+          )
       )[0] ?? patient.next_appointment;
 
-  const vitalsList = [
+  const vitalFields = [
     [
       "Blood Pressure",
       vitals?.blood_pressure ??
-        (vitals?.systolic != null && vitals?.diastolic != null
+        (vitals?.systolic != null &&
+        vitals?.diastolic != null
           ? `${vitals.systolic}/${vitals.diastolic} mmHg`
           : null),
     ],
     ["Heart Rate", vitals?.heart_rate ?? vitals?.pulse],
     ["Temperature", vitals?.temperature],
-    ["Respiratory Rate", vitals?.respiratory_rate ?? vitals?.respirations],
-    ["Oxygen Saturation", vitals?.spo2 ?? vitals?.oxygen_saturation],
-    ["Weight", vitals?.weight],
+    [
+      "Respiratory Rate",
+      vitals?.respiratory_rate ?? vitals?.respirations,
+    ],
+    [
+      "Oxygen Saturation",
+      vitals?.spo2 ?? vitals?.oxygen_saturation,
+    ],
+    [
+      "Weight",
+      vitals?.weight_lbs != null
+        ? `${vitals.weight_lbs} lbs`
+        : vitals?.weight,
+    ],
+    [
+      "Blood Glucose",
+      vitals?.blood_glucose_mg_dl != null
+        ? `${vitals.blood_glucose_mg_dl} mg/dL`
+        : vitals?.blood_glucose,
+    ],
   ];
 
-  const action = (target) => (
+  const viewAll = (target) => (
     <button
       type="button"
       className="secondary-button"
@@ -384,6 +458,7 @@ export default function StudentCaseDetailPage({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          flexWrap: "wrap",
           gap: 16,
           marginBottom: 8,
           padding: 0,
@@ -396,7 +471,6 @@ export default function StudentCaseDetailPage({
           >
             Student Patient Record · Case {patient.id}
           </p>
-
           <h1
             style={{
               margin: "0 0 4px",
@@ -406,10 +480,8 @@ export default function StudentCaseDetailPage({
           >
             {patient.patient_name}
           </h1>
-
           <p style={{ margin: 0, fontSize: 14 }}>
-            {text(patient.patient_age)} years ·{" "}
-            {text(patient.patient_sex)} · {patient.title}
+            {patient.title}
           </p>
         </div>
 
@@ -434,7 +506,6 @@ export default function StudentCaseDetailPage({
             : "150px minmax(0, 1fr)",
           gap: 12,
           alignItems: "start",
-          marginTop: 0,
         }}
       >
         <aside
@@ -473,7 +544,9 @@ export default function StudentCaseDetailPage({
               }}
               onClick={() => setCollapsed(!collapsed)}
               aria-label={
-                collapsed ? "Expand navigation" : "Collapse navigation"
+                collapsed
+                  ? "Expand navigation"
+                  : "Collapse navigation"
               }
             >
               {collapsed ? "»" : "«"}
@@ -488,12 +561,14 @@ export default function StudentCaseDetailPage({
               gap: 7,
             }}
           >
-            {tabs.map((item) => (
+            {TABS.map((item) => (
               <button
                 key={item}
                 type="button"
                 className="patient-nav-button"
-                aria-current={tab === item ? "page" : undefined}
+                aria-current={
+                  tab === item ? "page" : undefined
+                }
                 title={item}
                 onClick={() => setTab(item)}
                 style={{
@@ -501,11 +576,13 @@ export default function StudentCaseDetailPage({
                   padding: "11px 8px",
                   textAlign: collapsed ? "center" : "left",
                   border: `1px solid ${
-                    tab === item ? "#16a78b" : "#e5e9f0"
+                    tab === item ? MINT : "#e5e9f0"
                   }`,
                   borderRadius: 9,
-                  background: tab === item ? "#16a78b" : "#f7f9fc",
-                  color: tab === item ? "white" : "#53627b",
+                  background:
+                    tab === item ? MINT : "#f7f9fc",
+                  color:
+                    tab === item ? "#183b43" : "#53627b",
                   fontWeight: tab === item ? 700 : 600,
                   fontSize: 12,
                   cursor: "pointer",
@@ -534,34 +611,42 @@ export default function StudentCaseDetailPage({
               marginBottom: 12,
             }}
           >
-
-            <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+            <div
+              style={{
+                flex: "1 1 200px",
+                minWidth: 0,
+              }}
+            >
               <p
                 className="section-label"
-                style={{ margin: "0 0 4px", fontSize: 11 }}
+                style={{
+                  margin: "0 0 4px",
+                  fontSize: 11,
+                }}
               >
                 Chief Complaint
               </p>
-
               <strong style={{ fontSize: 13 }}>
-                {text(patient.chief_complaint)}
+                {display(patient.chief_complaint)}
               </strong>
             </div>
 
             <div style={{ minWidth: 110 }}>
               <p
                 className="section-label"
-                style={{ margin: "0 0 4px", fontSize: 11 }}
+                style={{
+                  margin: "0 0 4px",
+                  fontSize: 11,
+                }}
               >
                 Encounter Status
               </p>
-
               <span className="status-badge">
                 {encounter}
               </span>
             </div>
 
-            {actions[encounter] && (
+            {ACTIONS[encounter] && (
               <button
                 type="button"
                 className="primary-button"
@@ -573,7 +658,9 @@ export default function StudentCaseDetailPage({
                   flexShrink: 0,
                 }}
               >
-                {updating ? "Updating..." : actions[encounter]}
+                {updating
+                  ? "Updating..."
+                  : ACTIONS[encounter]}
               </button>
             )}
           </section>
@@ -584,35 +671,49 @@ export default function StudentCaseDetailPage({
                 className="case-section-heading"
                 style={{ marginBottom: 12 }}
               >
-                <div>
-                  <p
-                    className="section-label"
-                    style={{ margin: "0 0 4px" }}
-                  >
-                    Patient Overview
-                  </p>
-
-                  <h2 style={{ margin: 0 }}>
-                    Clinical Summary
-                  </h2>
-                </div>
+                <h2 style={{ margin: 0 }}>
+                  Patient Overview
+                </h2>
               </div>
 
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns:
-                    "repeat(auto-fit, minmax(min(100%, 300px), 1fr))",
-                  gap: 16,
-                }}
-              >
+              <div className="clinical-summary-grid">
                 <Card title="Demographics">
                   <dl className="detail-form-grid">
-                    <Row label="Age" value={patient.patient_age} />
-                    <Row label="Sex" value={patient.patient_sex} />
+                    <Row
+                      label="Age"
+                      value={patient.patient_age}
+                    />
+                    <Row
+                      label="Sex"
+                      value={patient.patient_sex}
+                    />
                     <Row
                       label="Date of Birth"
-                      value={patient.date_of_birth ?? patient.dob}
+                      value={
+                        patient.date_of_birth ?? patient.dob
+                      }
+                    />
+                  </dl>
+                </Card>
+
+                <Card title="Contact Information">
+                  <dl className="detail-form-grid">
+                    <Row
+                      label="Phone"
+                      value={
+                        patient.phone ?? patient.phone_number
+                      }
+                    />
+                    <Row
+                      label="Address"
+                      value={patient.address}
+                    />
+                    <Row
+                      label="Careflow ID"
+                      value={
+                        patient.careflow_id ??
+                        patient.careflowId
+                      }
                     />
                     <Row
                       label="MRN"
@@ -624,38 +725,71 @@ export default function StudentCaseDetailPage({
                   </dl>
                 </Card>
 
-                <Card title="Allergies">
-                  {hasCategories ? (
-                    Object.entries(allergyGroups).map(([label, value]) => (
-                      <Row
-                        key={label}
-                        label={label}
-                        value={value}
+                <Card
+                  title="Medical History & Diagnoses"
+                  fullWidth
+                >
+                  <div className="medical-history-grid">
+                    <div>
+                      <h3 className="clinical-subheading">
+                        Medical History
+                      </h3>
+                      <Value value={medicalHistory} />
+                    </div>
+
+                    <div>
+                      <h3 className="clinical-subheading">
+                        Diagnoses
+                      </h3>
+                      <Value
+                        value={
+                          patient.diagnoses ??
+                          patient.diagnosis
+                        }
                       />
-                    ))
+                    </div>
+
+                    <div>
+                      <h3 className="clinical-subheading">
+                        Surgical History
+                      </h3>
+                      <Value
+                        value={patient.surgical_history}
+                      />
+                    </div>
+                  </div>
+                </Card>
+
+                <Card title="Allergies">
+                  {hasAllergyGroups ? (
+                    <dl className="detail-form-grid">
+                      {Object.entries(allergyGroups).map(
+                        ([label, value]) => (
+                          <Row
+                            key={label}
+                            label={label}
+                            value={value}
+                          />
+                        )
+                      )}
+                    </dl>
                   ) : (
                     <Value value={allergies} />
                   )}
                 </Card>
 
-                <Card title="Diagnoses">
-                  <Value
-                    value={
-                      patient.diagnoses ??
-                      patient.diagnosis
-                    }
-                  />
-
-                  <p className="case-help-text">
-                    Provider-managed information.
-                  </p>
+                <Card
+                  title="Current Medications"
+                  action={viewAll("Medications")}
+                >
+                  <Value value={patient.medications} />
                 </Card>
 
                 <Card title="Current Vitals">
                   {vitals ? (
                     <>
                       <dl className="detail-form-grid">
-                        {vitalsList.map(([label, value]) => (
+                        {vitalFields.map(([label, value]) => (
                           <Row
                             key={label}
                             label={label}
@@ -663,13 +797,12 @@ export default function StudentCaseDetailPage({
                           />
                         ))}
                       </dl>
-
                       <p className="case-help-text">
                         Last recorded:{" "}
-                        {formattedDate(
+                        {formatDate(
                           vitals.recorded_at ??
-                          vitals.measured_at ??
-                          vitals.date
+                            vitals.measured_at ??
+                            vitals.date
                         )}
                       </p>
                     </>
@@ -682,7 +815,7 @@ export default function StudentCaseDetailPage({
 
                 <Card
                   title="Recent Labs"
-                  action={action("Labs")}
+                  action={viewAll("Labs")}
                 >
                   {labs.length ? (
                     <dl className="detail-form-grid">
@@ -690,11 +823,9 @@ export default function StudentCaseDetailPage({
                         <Row
                           key={lab.id ?? index}
                           label={
-                            lab.test_name ??
-                            lab.name ??
-                            "Lab"
+                            lab.test_name ?? lab.name ?? "Lab"
                           }
-                          value={`${text(
+                          value={`${display(
                             lab.result ?? lab.value
                           )} ${lab.unit || ""}`}
                         />
@@ -707,16 +838,26 @@ export default function StudentCaseDetailPage({
                   )}
 
                   {patient.results && (
-                    <Row
-                      label="Existing Clinical Results"
-                      value={patient.results}
-                    />
+                    <dl>
+                      <Row
+                        label="Existing Clinical Results"
+                        value={patient.results}
+                      />
+                    </dl>
                   )}
+                </Card>
+
+                <Card title="Care Team">
+                  <Value
+                    value={
+                      patient.care_team ?? patient.careTeam
+                    }
+                  />
                 </Card>
 
                 <Card
                   title="Next Appointment"
-                  action={action("Appointments")}
+                  action={viewAll("Appointments")}
                 >
                   {nextAppointment ? (
                     typeof nextAppointment === "object" ? (
@@ -726,19 +867,30 @@ export default function StudentCaseDetailPage({
                           value={
                             nextAppointment.title ??
                             nextAppointment.type ??
+                            nextAppointment.reason ??
                             "Appointment"
                           }
                         />
-
                         <Row
                           label="Date"
-                          value={formattedDate(
+                          value={formatDate(
                             nextAppointment.scheduled_at ??
-                            nextAppointment.appointment_date ??
-                            nextAppointment.date
+                              nextAppointment.appointment_date ??
+                              nextAppointment.date
                           )}
                         />
-
+                        <Row
+                          label="Reason"
+                          value={nextAppointment.reason}
+                        />
+                        <Row
+                          label="Location"
+                          value={nextAppointment.location}
+                        />
+                        <Row
+                          label="Status"
+                          value={nextAppointment.status}
+                        />
                         <Row
                           label="Provider"
                           value={nextAppointment.provider}
@@ -753,41 +905,50 @@ export default function StudentCaseDetailPage({
                     </p>
                   )}
                 </Card>
-              </div>
 
-              <section
-                className="panel data-panel case-section"
-                style={{ marginTop: 16 }}
-              >
-                <h2>Additional Patient Information</h2>
-
-                <dl className="detail-form-grid">
-                  <Row
-                    label="Chief Complaint"
-                    value={patient.chief_complaint}
-                  />
-
-                  <Row
-                    label="Medical History"
+                <Card title="Clinical Updates">
+                  <Value
                     value={
-                      patient.medical_history ??
-                      patient.history
+                      patient.clinical_updates ??
+                      patient.clinicalUpdates
                     }
                   />
+                </Card>
 
-                  <Row
-                    label="Surgical History"
-                    value={patient.surgical_history}
-                  />
-                </dl>
-              </section>
+                <Card
+                  title="Referrals"
+                  action={viewAll("Referrals")}
+                >
+                  {referrals.length ? (
+                    <dl className="detail-form-grid">
+                      {referrals
+                        .slice(0, 3)
+                        .map((referral, index) => (
+                          <Row
+                            key={referral.id ?? index}
+                            label={
+                              referral.specialty ?? "Referral"
+                            }
+                            value={
+                              referral.reason ??
+                              referral.status
+                            }
+                          />
+                        ))}
+                    </dl>
+                  ) : (
+                    <p className="case-help-text">
+                      No referrals recorded.
+                    </p>
+                  )}
+                </Card>
+              </div>
             </>
           )}
 
           {tab === "Medications" && (
             <Card title="Medications">
               <Value value={patient.medications} />
-
             </Card>
           )}
 
@@ -799,39 +960,38 @@ export default function StudentCaseDetailPage({
                   [
                     "Test",
                     (item) =>
-                      item.test_name ??
-                      item.name ??
-                      "Lab",
+                      item.test_name ?? item.name ?? "Lab",
                   ],
                   [
                     "Result",
                     (item) =>
-                      `${text(
+                      `${display(
                         item.result ?? item.value
                       )} ${item.unit || ""}`,
                   ],
                   [
                     "Reference Range",
                     (item) =>
-                      text(item.reference_range),
+                      display(item.reference_range),
                   ],
                   [
                     "Date",
                     (item) =>
-                      formattedDate(
+                      formatDate(
                         item.collected_at ??
-                        item.recorded_at ??
-                        item.date
+                          item.recorded_at ??
+                          item.date
                       ),
                   ],
                 ]}
               />
-
               {patient.results && (
-                <Row
-                  label="Existing Clinical Results"
-                  value={patient.results}
-                />
+                <dl>
+                  <Row
+                    label="Existing Clinical Results"
+                    value={patient.results}
+                  />
+                </dl>
               )}
             </Card>
           )}
@@ -855,24 +1015,33 @@ export default function StudentCaseDetailPage({
                     (item) =>
                       item.title ??
                       item.type ??
+                      item.reason ??
                       "Appointment",
                   ],
                   [
                     "Date",
                     (item) =>
-                      formattedDate(
+                      formatDate(
                         item.scheduled_at ??
-                        item.appointment_date ??
-                        item.date
+                          item.appointment_date ??
+                          item.date
                       ),
                   ],
                   [
+                    "Reason",
+                    (item) => display(item.reason),
+                  ],
+                  [
+                    "Location",
+                    (item) => display(item.location),
+                  ],
+                  [
                     "Provider",
-                    (item) => text(item.provider),
+                    (item) => display(item.provider),
                   ],
                   [
                     "Status",
-                    (item) => text(item.status),
+                    (item) => display(item.status),
                   ],
                 ]}
               />
@@ -886,22 +1055,21 @@ export default function StudentCaseDetailPage({
                 columns={[
                   [
                     "Specialty",
-                    (item) => text(item.specialty),
+                    (item) => display(item.specialty),
                   ],
                   [
                     "Reason",
-                    (item) => text(item.reason),
+                    (item) => display(item.reason),
                   ],
                   [
                     "Status",
-                    (item) => text(item.status),
+                    (item) => display(item.status),
                   ],
                   [
                     "Date",
                     (item) =>
-                      formattedDate(
-                        item.created_at ??
-                        item.date
+                      formatDate(
+                        item.created_at ?? item.date
                       ),
                   ],
                 ]}
@@ -910,35 +1078,6 @@ export default function StudentCaseDetailPage({
           )}
         </main>
       </div>
-
-      <style>{`
-        .patient-nav-button:hover:not([aria-current="page"]) {
-          background: #e7f6f1 !important;
-          color: #128b73 !important;
-          border-color: #b5e4d6 !important;
-        }
-
-        .patient-nav-button:focus-visible {
-          outline: 2px solid #16a78b;
-          outline-offset: 2px;
-        }
-
-        @media (max-width: 750px) {
-          .patient-workspace {
-            grid-template-columns: 1fr !important;
-          }
-
-          .patient-workspace nav {
-            flex-direction: row !important;
-            flex-wrap: wrap;
-          }
-
-          .patient-workspace nav button {
-            width: auto !important;
-            flex: 1 1 auto;
-          }
-        }
-      `}</style>
     </div>
   );
 }

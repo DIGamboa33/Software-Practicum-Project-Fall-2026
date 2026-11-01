@@ -699,3 +699,13 @@ export async function fetchPatientVitals() {
   if (!response.ok) throw new Error(payload.message || "Unable to load vitals.");
   return payload;
 }
+
+export function fetchInstructorPatients() {
+  return instructorRequest("/patients");
+}
+
+export function fetchInstructorPatientDetails(patientId) {
+  return instructorRequest(
+    `/patients/${encodeURIComponent(patientId)}`
+  );
+}

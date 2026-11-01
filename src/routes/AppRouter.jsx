@@ -15,6 +15,7 @@ import DashboardPage from "../pages/DashboardPage";
 import InstructorClassesPage from "../pages/InstructorClassesPage";
 import InstructorOverviewPage from "../pages/InstructorOverviewPage";
 import InstructorReviewPage from "../pages/InstructorReviewPage";
+import InstructorPatientsPage from "../pages/InstructorPatientsPage";
 import LoginPage from "../pages/LoginPage";
 import RegisterPage from "../pages/RegisterPage";
 import PasswordSetupPage from "../pages/PasswordSetupPage";
@@ -88,6 +89,10 @@ const routesByRole = {
         "No cohort analytics yet",
         "Aggregate performance and audit activity will appear here when database reporting is connected.",
       ),
+      patients: {
+        path: "/instructor/patients",
+        Component: InstructorPatientsPage,
+      },
       closeout: placeholder(
         "/instructor/closeout",
         "Closeout",
