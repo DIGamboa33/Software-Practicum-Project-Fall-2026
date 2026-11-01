@@ -704,13 +704,6 @@ export function fetchInstructorPatients() {
   return instructorRequest("/patients");
 }
 
-export function createInstructorPatient(patientData) {
-  return instructorRequest("/patients", {
-    method: "POST",
-    body: JSON.stringify(patientData),
-  });
-}
-
 export function fetchInstructorPatientDetails(patientId) {
   return instructorRequest(
     `/patients/${encodeURIComponent(patientId)}`
