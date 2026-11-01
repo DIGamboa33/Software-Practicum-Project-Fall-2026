@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchPatientAppointments, fetchPatientVitals, schedulePatientAppointment } from "../lib/api";
+import { fetchPatientAppointments, fetchPatientVitals } from "../lib/api";
 
 function PatientAppointmentsPage() {
   const [appointments, setAppointments] = useState([]);
@@ -35,25 +35,7 @@ function PatientAppointmentsPage() {
     loadData();
   }, []);
 
-  async function handleSchedule(e) {
-    e.preventDefault();
-    try {
-      setIsSubmitting(true);
-      await schedulePatientAppointment({
-        reason,
-        appointment_date: appointmentDate,
-        location,
-      });
-      setShowModal(false);
-      setReason("");
-      setAppointmentDate("");
-      loadData();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to schedule.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
+
 
   const now = new Date();
   const upcoming = appointments.filter((a) => new Date(a.appointment_date) >= now);
@@ -76,9 +58,7 @@ function PatientAppointmentsPage() {
           <h1>Appointments</h1>
           <p>Manage your upcoming visits and review past consultations and vitals.</p>
         </div>
-        <button className="primary-button" type="button" onClick={() => setShowModal(true)}>
-          Schedule Appointment ＋
-        </button>
+      
       </section>
 
       {error && <section className="panel directory-error" style={{ marginTop: "20px" }}>{error}</section>}
@@ -151,55 +131,7 @@ function PatientAppointmentsPage() {
         </div>
       </section>
 
-      {/* Schedule Modal / Form Section */}
-      {showModal && (
-        <div className="sidebar-backdrop" style={{ display: "grid", placeItems: "center", zIndex: 10 }}>
-          <section className="panel" style={{ width: "min(90%, 460px)", padding: "28px" }}>
-            <div className="panel__header">
-              <h2>Schedule New Appointment</h2>
-              <button className="more-button" type="button" onClick={() => setShowModal(false)}>✕</button>
-            </div>
-            <form onSubmit={handleSchedule} className="scenario-form" style={{ marginTop: "20px" }}>
-              <label>
-                Reason for Visit
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g., Diabetes Follow-up"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                />
-              </label>
-              <label>
-                Date & Time
-                <input
-                  type="datetime-local"
-                  required
-                  value={appointmentDate}
-                  onChange={(e) => setAppointmentDate(e.target.value)}
-                />
-              </label>
-              <label>
-                Location / Room
-                <input
-                  type="text"
-                  required
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                />
-              </label>
-              <div className="form-actions" style={{ marginTop: "16px" }}>
-                <button className="secondary-button" type="button" onClick={() => setShowModal(false)}>
-                  Cancel
-                </button>
-                <button className="primary-button" type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? "Scheduling..." : "Confirm Appointment"}
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
-      )}
+      
     </div>
   );
 }
