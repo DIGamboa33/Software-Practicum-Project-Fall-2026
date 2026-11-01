@@ -800,53 +800,73 @@ async function deleteDraft(note) {
           ) : !notes.length ? (
             <p>No notes created yet.</p>
           ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    {["Title", "Note Type", "Updated", "Status", "Instructor", "Action"].map(
-                      (heading) => <th key={heading}>{heading}</th>
+            
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                {[
+                  "Action",
+                  "Status",
+                  "Title",
+                  "Note Type",
+                  "Updated",
+                  "Instructor",
+                ].map((heading) => (
+                  <th key={heading}>{heading}</th>
+                ))}
+              </tr>
+            </thead>
+
+            <tbody>
+              {notes.map((note) => (
+                <tr
+                  key={`${note.fromDatabase ? "db" : "local"}-${note.id}`}
+                >
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => open(note)}
+                    >
+                      {locked(note) ? "View" : "Continue"}
+                    </button>
+
+                    {note.status === "Draft" && (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        style={{
+                          marginLeft: "8px",
+                          color: "#dc2626",
+                          borderColor: "#dc2626",
+                        }}
+                        disabled={saving || deleting}
+                        onClick={() => deleteDraft(note)}
+                      >
+                        {deleting ? "Deleting..." : "Delete"}
+                      </button>
                     )}
-                  </tr>
-                </thead>
+                  </td>
 
-                <tbody>
-                  {notes.map((note) => (
-                    <tr key={`${note.fromDatabase ? "db" : "local"}-${note.id}`}>
-                      <td>{note.title}</td>
-                      <td>{TEMPLATES[note.type]?.label || note.type}</td>
-                      <td>{formatDate(note.updatedAt)}</td>
-                      <td>{note.status || "Draft"}</td>
-                      <td>{note.instructorName || "—"}</td>
-                      <td>
-                        <button
-                          className="secondary-button"
-                          onClick={() => open(note)}
-                        >
-                          {locked(note) ? "View" : "Continue"}
-                        </button>
+                  <td>{note.status || "Draft"}</td>
 
-                        {note.status === "Draft" && (
-                          <button
-                            type="button"
-                            className="secondary-button"
-                            style={{
-                              marginLeft: "8px",
-                              color: "#dc2626",
-                              borderColor: "#dc2626",
-                            }}
-                            disabled={saving || deleting}
-                            onClick={() => deleteDraft(note)}
-                          >
-                            {deleting ? "Deleting..." : "Delete"}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  <td>{note.title}</td>
+
+                  <td>
+                    {TEMPLATES[note.type]?.label || note.type}
+                  </td>
+
+                  <td>{formatDate(note.updatedAt)}</td>
+
+
+                  <td>{note.instructorName || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
           )}
         </section>
       ) : (

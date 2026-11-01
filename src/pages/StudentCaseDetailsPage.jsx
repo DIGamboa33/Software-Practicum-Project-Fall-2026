@@ -672,7 +672,7 @@ export default function StudentCaseDetailPage({
                 style={{ marginBottom: 12 }}
               >
                 <h2 style={{ margin: 0 }}>
-                  Clinical Summary
+                  Patient Overview
                 </h2>
               </div>
 
