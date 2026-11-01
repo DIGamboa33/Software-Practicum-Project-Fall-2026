@@ -742,7 +742,7 @@ studentRouter.get("/classes", async (request, response) => {
     supabaseAdmin
       .schema("school")
       .from("classrooms")
-      .select("id, crn, full_name, short_name, room, term, status")
+      .select("id, crn, full_name, short_name, room, term, status, discipline_subrole_id")
       .in("id", classroomIds),
     supabaseAdmin
       .schema("school")
