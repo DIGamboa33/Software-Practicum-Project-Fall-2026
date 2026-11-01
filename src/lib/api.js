@@ -198,6 +198,13 @@ export function bulkInviteStudents(students) {
   });
 }
 
+export function bulkCreatePatients(patients) {
+  return adminRequest("/patients/bulk-create", {
+    method: "POST",
+    body: JSON.stringify({ patients }),
+  });
+}
+
 async function instructorRequest(path, options = {}) {
   const response = await fetch(`/api/instructor${path}`, {
     ...options,

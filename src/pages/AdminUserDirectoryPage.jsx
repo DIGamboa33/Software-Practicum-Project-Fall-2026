@@ -378,7 +378,7 @@ function AdminUserDirectoryPage() {
                           onClick={() => setSelectedUserId(user.id)}
                           type="button"
                         >
-                          <Icon name="arrow" size={16} />
+                          Details
                         </button>
                       </td>
                     </tr>

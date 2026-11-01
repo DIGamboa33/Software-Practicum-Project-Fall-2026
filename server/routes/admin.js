@@ -890,6 +890,126 @@ adminRouter.post("/students/bulk-invite", async (request, response) => {
   }
 });
 
+adminRouter.post("/patients/bulk-create", async (request, response) => {
+  const patients = Array.isArray(request.body.patients)
+    ? request.body.patients.slice(0, 100)
+    : [];
+
+  if (!patients.length) {
+    return response.status(400).json({
+      message: "Add at least one patient before creating accounts.",
+    });
+  }
+
+  try {
+    const context = await requireAdmin(request, response);
+    if (!context) return;
+
+    const { supabaseAdmin, actor } = context;
+    if (!(await ensureAuditLogReady(supabaseAdmin, response))) return;
+
+    const { data: patientRole, error: roleError } = await supabaseAdmin
+      .from("roles")
+      .select("id")
+      .eq("name", "Patient")
+      .single();
+
+    if (roleError || !patientRole) {
+      throw roleError || new Error("Patient role is not configured.");
+    }
+
+    const created = [];
+    const failed = [];
+
+    for (const entry of patients) {
+      const firstName = String(entry.firstName || "").trim();
+      const lastName = String(entry.lastName || "").trim();
+      const utepId = String(entry.utepId || "").trim() || null;
+
+      if (!firstName || !lastName) {
+        failed.push({
+          name: `${firstName} ${lastName}`.trim() || "Unnamed patient",
+          message: "A first and last name are required.",
+        });
+        continue;
+      }
+
+      const temporaryPassword = generateTemporaryPassword();
+      let email = "";
+      let authData = null;
+      let authError = null;
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        email = makeCareflowEmail(firstName, lastName);
+        const result = await supabaseAdmin.auth.admin.createUser({
+          email,
+          password: temporaryPassword,
+          email_confirm: true,
+          user_metadata: {
+            first_name: firstName,
+            last_name: lastName,
+            display_name: `${firstName} ${lastName}`,
+            must_change_password: true,
+          },
+        });
+        authData = result.data;
+        authError = result.error;
+
+        if (!authError || !/already registered|already exists|duplicate/i.test(authError.message || "")) {
+          break;
+        }
+      }
+
+      if (authError || !authData?.user) {
+        failed.push({
+          name: `${firstName} ${lastName}`,
+          message: authError?.message || "Unable to create the Auth account.",
+        });
+        continue;
+      }
+
+      const { error: profileError } = await supabaseAdmin.from("profiles").insert({
+        id: authData.user.id,
+        first_name: firstName,
+        last_name: lastName,
+        utep_id: utepId,
+        role_id: patientRole.id,
+        sub_role_id: null,
+      });
+
+      if (profileError) {
+        await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+        failed.push({ name: `${firstName} ${lastName}`, message: profileError.message });
+        continue;
+      }
+
+      await writeAuditLog(supabaseAdmin, {
+        actor_id: actor.id,
+        target_user_id: authData.user.id,
+        action: "patient.bulk_created",
+        details: { email },
+      });
+      created.push({
+        id: authData.user.id,
+        name: `${firstName} ${lastName}`,
+        email,
+        temporaryPassword,
+      });
+    }
+
+    return response.status(201).json({
+      created,
+      failed,
+      message: `${created.length} patient account${created.length === 1 ? "" : "s"} created.`,
+    });
+  } catch (error) {
+    console.error("Unable to bulk create patients:", error);
+    return response.status(500).json({
+      message: error.message || "Unable to create patient accounts.",
+    });
+  }
+});
+
 adminRouter.post("/academics/classrooms/:classroomId/instructors", async (request, response) => {
   try {
     const context = await requireAdmin(request, response);

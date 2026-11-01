@@ -10,7 +10,21 @@ import {
 } from "recharts";
 import Icon from "../components/Icon";
 import Pagination from "../components/Pagination";
-import { fetchAdminPatients } from "../lib/api";
+import { bulkCreatePatients, fetchAdminPatients } from "../lib/api";
+
+function parsePatients(value) {
+  return value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [firstName = "", lastName = "", utepId = ""] = line
+        .split(",")
+        .map((item) => item.trim());
+
+      return { firstName, lastName, utepId };
+    });
+}
 
 function AdminPatientsPage() {
   const navigate = useNavigate();
@@ -22,6 +36,11 @@ function AdminPatientsPage() {
   const [searchText, setSearchText] = useState("");
   const [patientPage, setPatientPage] = useState(1);
   const [patientsPerPage, setPatientsPerPage] = useState(10);
+  const [isBulkOpen, setIsBulkOpen] = useState(false);
+  const [bulkRows, setBulkRows] = useState("");
+  const [temporaryCredentials, setTemporaryCredentials] = useState([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [actionNotice, setActionNotice] = useState("");
 
   // Helps us show a loading message while waiting for Supabase.
   const [isLoading, setIsLoading] = useState(true);
@@ -29,29 +48,56 @@ function AdminPatientsPage() {
   // Stores an error message if the API request fails.
   const [error, setError] = useState("");
 
+  async function loadPatients() {
+    try {
+      setIsLoading(true);
+      setError("");
+
+      const patientData = await fetchAdminPatients();
+
+      setPatients(patientData);
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Unable to load patients.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   // Load the patients when this page first opens.
   useEffect(() => {
-    async function loadPatients() {
-      try {
-        setIsLoading(true);
-        setError("");
-
-        const patientData = await fetchAdminPatients();
-
-        setPatients(patientData);
-      } catch (loadError) {
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : "Unable to load patients.",
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
     loadPatients();
   }, []);
+
+  async function handleBulkCreate(event) {
+    event.preventDefault();
+    setIsSaving(true);
+    setActionNotice("");
+    setError("");
+
+    try {
+      const result = await bulkCreatePatients(parsePatients(bulkRows));
+      setTemporaryCredentials(result.created || []);
+      setActionNotice(result.message);
+      setBulkRows("");
+      await loadPatients();
+
+      if (!result.failed?.length) {
+        setIsBulkOpen(false);
+      }
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Unable to create patient accounts.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   // Search through the patient list.
   function getFilteredPatients() {
@@ -146,7 +192,93 @@ function AdminPatientsPage() {
             Search Patient accounts currently stored in Careflow.
           </p>
         </div>
+        <button
+          className="primary-button directory-create-button"
+          onClick={() => setIsBulkOpen(true)}
+          type="button"
+        >
+          <Icon name="plus" size={16} /> Bulk add patients
+        </button>
       </section>
+
+      {(actionNotice || temporaryCredentials.length > 0) && (
+        <section className="panel directory-action-message directory-success" role="status">
+          {actionNotice}
+        </section>
+      )}
+
+      {temporaryCredentials.length > 0 && (
+        <section className="panel temporary-credentials-panel">
+          <div className="panel__header">
+            <div>
+              <p className="section-label">One-time secure handoff</p>
+              <h2>Temporary patient passwords</h2>
+            </div>
+            <button
+              aria-label="Hide temporary passwords"
+              className="row-action"
+              onClick={() => setTemporaryCredentials([])}
+              type="button"
+            >
+              ×
+            </button>
+          </div>
+          <p>
+            Record these now. Careflow cannot display these passwords again after this panel is closed or refreshed.
+          </p>
+          <div className="temporary-credentials-list">
+            {temporaryCredentials.map((credential) => (
+              <div key={credential.id}>
+                <span>
+                  <strong>{credential.name}</strong>
+                  <small>{credential.email}</small>
+                </span>
+                <code>{credential.temporaryPassword}</code>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {isBulkOpen && (
+        <section className="panel admin-academics-form-panel">
+          <div className="panel__header">
+            <div>
+              <p className="section-label">Patient provisioning</p>
+              <h2>Create patient accounts in bulk</h2>
+            </div>
+            <button
+              aria-label="Close bulk patient form"
+              className="row-action"
+              onClick={() => setIsBulkOpen(false)}
+              type="button"
+            >
+              ×
+            </button>
+          </div>
+          <form className="bulk-student-form" onSubmit={handleBulkCreate}>
+            <label>
+              Patient rows
+              <span>One per line: First name, Last name, UTEP ID (optional)</span>
+              <textarea
+                onChange={(event) => setBulkRows(event.target.value)}
+                placeholder={"Jane, Doe, 80123456\nJohn, Doe, 80123457"}
+                required
+                value={bulkRows}
+              />
+            </label>
+            <p className="bulk-student-form__hint">
+              Careflow creates unique <strong>first.last.123456@careflow.test</strong> patient accounts with a temporary password shown once after creation.
+            </p>
+            <div className="admin-form__actions">
+              <button className="secondary-button" onClick={() => setIsBulkOpen(false)} type="button">Cancel</button>
+              <button className="primary-button" disabled={isSaving} type="submit">
+                {isSaving ? "Creating accounts…" : "Create patient accounts"}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
 
       <section className="panel data-panel">
         <div className="data-panel__toolbar">
