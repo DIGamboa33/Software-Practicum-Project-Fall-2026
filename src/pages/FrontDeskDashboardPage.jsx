@@ -5,7 +5,8 @@ import {
   updateFrontDeskAppointmentStatus,
   createFrontDeskAppointment,
   confirmFrontDeskIntake, 
-  fetchFrontDeskPatientReferrals
+  fetchFrontDeskPatientReferrals,
+  updateFrontDeskReferralAppointment,
 } from '../lib/api';
 
 export default function FrontDeskDashboardPage() {

@@ -768,3 +768,88 @@ export function fetchInstructorPatientDetails(patientId) {
     `/patients/${encodeURIComponent(patientId)}`
   );
 }
+
+async function authenticatedRequest(path, options = {}) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+
+  if (!accessToken) {
+    throw new Error("No active session. Please sign in again.");
+  }
+
+  const response = await fetch(path, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...options.headers,
+    },
+  });
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(payload.message || "Unable to complete this request.");
+  }
+
+  return payload;
+}
+
+export function fetchFrontDeskDashboard() {
+  return authenticatedRequest("/api/front-desk/dashboard");
+}
+
+export function updateFrontDeskAppointmentStatus(appointmentId, status) {
+  return authenticatedRequest(`/api/front-desk/appointments/${encodeURIComponent(appointmentId)}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+}
+
+export function createFrontDeskAppointment(appointment) {
+  return authenticatedRequest("/api/front-desk/appointments", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(appointment),
+  });
+}
+
+export function confirmFrontDeskIntake(intake) {
+  return authenticatedRequest("/api/front-desk/intakes/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(intake),
+  });
+}
+
+export function fetchFrontDeskPatientReferrals(patientId) {
+  return authenticatedRequest(
+    `/api/front-desk/patients/${encodeURIComponent(patientId)}/referrals`,
+  );
+}
+
+export function updateFrontDeskReferralAppointment(referralId, appointmentId) {
+  return authenticatedRequest(`/api/front-desk/referrals/${encodeURIComponent(referralId)}/schedule`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ appointment_id: appointmentId }),
+  });
+}
+
+export function fetchBillingDashboard() {
+  return authenticatedRequest("/api/billing/dashboard");
+}
+
+export function updateClaimStatus(claimId, status) {
+  return authenticatedRequest(`/api/billing/claims/${encodeURIComponent(claimId)}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+}
+
+export function updateClaimCodes(claimId, cptCode, icd10Code) {
+  return authenticatedRequest(`/api/billing/claims/${encodeURIComponent(claimId)}/codes`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cpt_code: cptCode, icd10_code: icd10Code }),
+  });
+}
