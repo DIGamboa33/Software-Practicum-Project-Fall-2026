@@ -14,7 +14,6 @@ export default function FrontDeskDashboardPage() {
   const [error, setError] = useState('');
   const [feedback, setFeedback] = useState('');
 
-
   const [profiles, setProfiles] = useState([]);
   const [patientRecords, setPatientRecords] = useState([]);
   const [appointments, setAppointments] = useState([]);
@@ -24,7 +23,6 @@ export default function FrontDeskDashboardPage() {
   const [walkInModalOpen, setWalkInModalOpen] = useState(false);
   const [walkInPatientId, setWalkInPatientId] = useState('');
 
-  // Add these states at the top of your component alongside your other states:
   const [patientReferrals, setPatientReferrals] = useState([]);
   const [selectedReferralId, setSelectedReferralId] = useState('');
 
@@ -124,7 +122,7 @@ export default function FrontDeskDashboardPage() {
 
   const metrics = [
     { label: "Intake Queue", value: intakeQueue.length, note: "Awaiting verification & check-in", tone: "teal" },
-    { label: "In-Progress (Checked-In)", value: inProgressQueue.length, note: "Appointments in progress", tone: "indigo" },
+    { label: "In-Progress (Checked-In)", value: inProgressQueue.length, note: "Appointments in progress", tone: "blue" },
     { label: "Scheduled visits", value: appointments.filter(a => a.status === 'Scheduled').length, note: "Scheduled visits", tone: "amber" },
   ];
 
@@ -181,14 +179,12 @@ export default function FrontDeskDashboardPage() {
     if (pId) {
       try {
         const referrals = await fetchFrontDeskPatientReferrals(pId);
-        // Filter for pending referrals
         setPatientReferrals(referrals.filter(r => r.status === 'Pending'));
       } catch (err) {
         console.error("Error fetching referrals:", err);
       }
     }
   };
-
 
   const handleScheduleAppointment = async (e) => {
     e.preventDefault();
@@ -200,7 +196,6 @@ export default function FrontDeskDashboardPage() {
         location: "Main Clinic Room A"
       });
 
-      // If a referral was selected, update its status and link the new appointment id
       if (selectedReferralId && createdAppt?.id) {
         await updateFrontDeskReferralAppointment(selectedReferralId, createdAppt.id);
       }
@@ -252,12 +247,19 @@ export default function FrontDeskDashboardPage() {
           <h1>Front Desk Workspace</h1>
           <p>Manage patient intakes, track in-progress waiting rooms, and check-out completed visits.</p>
         </div>
+        <button
+          type="button"
+          onClick={() => { setWalkInModalOpen(true); setSelectedIntake(null); setWalkInPatientId(''); }}
+          className="primary-button directory-create-button"
+        >
+          + Take Walk-In
+        </button>
       </section>
 
-      {error && <section className="panel directory-error" style={{ background: '#fef2f2', color: '#991b1b', borderColor: '#fecaca', marginBottom: '16px' }}>{error}</section>}
-      {feedback && <section className="panel directory-error" style={{ background: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0', marginBottom: '16px' }}>{feedback}</section>}
+      {error && <section className="panel directory-error">{error}</section>}
+      {feedback && <section className="panel directory-error directory-success">{feedback}</section>}
 
-      <section className="instructor-overview-metrics">
+      <section className="metric-grid instructor-overview-metrics">
         {metrics.map((metric) => (
           <article className={`panel instructor-overview-metric instructor-overview-metric--${metric.tone}`} key={metric.label}>
             <span>{metric.label}</span>
@@ -267,132 +269,127 @@ export default function FrontDeskDashboardPage() {
         ))}
       </section>
 
-      <section className="panel classroom-health-panel" style={{ padding: '12px 20px', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      {/* Tabs navigation using roster-controls__tabs / roster-view-button */}
+      <section className="panel classroom-health-panel" style={{ padding: '14px 20px', marginBottom: '18px' }}>
+        <div className="roster-controls" style={{ background: 'transparent', border: 'none', padding: 0 }}>
+          <div className="roster-controls__tabs">
             <button
               type="button"
               onClick={() => setActiveTab('overview')}
-              className={`btn ${activeTab === 'overview' ? 'btn-primary' : 'btn-outline-secondary'}`}
-              style={{ fontSize: '13px', padding: '6px 14px' }}
+              className={`roster-view-button ${activeTab === 'overview' ? 'roster-view-button--active' : ''}`}
             >
               Overview Summary
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('intake')}
-              className={`btn ${activeTab === 'intake' ? 'btn-primary' : 'btn-outline-secondary'}`}
-              style={{ fontSize: '13px', padding: '6px 14px' }}
+              className={`roster-view-button ${activeTab === 'intake' ? 'roster-view-button--active' : ''}`}
             >
               Intake Queue ({intakeQueue.length})
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('inprogress')}
-              className={`btn ${activeTab === 'inprogress' ? 'btn-primary' : 'btn-outline-secondary'}`}
-              style={{ fontSize: '13px', padding: '6px 14px' }}
+              className={`roster-view-button ${activeTab === 'inprogress' ? 'roster-view-button--active' : ''}`}
             >
               In-Progress Queue ({inProgressQueue.length})
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('scheduling')}
-              className={`btn ${activeTab === 'scheduling' ? 'btn-primary' : 'btn-outline-secondary'}`}
-              style={{ fontSize: '13px', padding: '6px 14px' }}
+              className={`roster-view-button ${activeTab === 'scheduling' ? 'roster-view-button--active' : ''}`}
             >
               Schedule Appointment
             </button>
           </div>
-
-          <button
-            type="button"
-            onClick={() => { setWalkInModalOpen(true); setSelectedIntake(null); setWalkInPatientId(''); }}
-            className="btn btn-success"
-            style={{ fontSize: '13px', padding: '6px 14px' }}
-          >
-            + Take Walk-In
-          </button>
         </div>
       </section>
 
-      {/* Walk-In Modal Form */}
+      {/* Walk-In Modal Overlay */}
       {walkInModalOpen && (
-        <section className="panel classroom-health-panel" style={{ marginBottom: '24px', border: '2px solid #10b981', background: '#f9fafb' }}>
-          <div className="panel__header">
-            <div><p className="section-label">Walk-In Management</p><h2>Process Patient Walk-In Intake & Check-In</h2></div>
-            <button type="button" onClick={() => setWalkInModalOpen(false)} className="btn btn-sm btn-outline-secondary">Close X</button>
-          </div>
+        <div className="account-modal-backdrop">
+          <div className="panel account-detail-modal">
+            <div className="panel__header">
+              <div>
+                <p className="section-label">Walk-In Management</p>
+                <h2>Process Patient Walk-In Intake & Check-In</h2>
+              </div>
+              <button type="button" onClick={() => setWalkInModalOpen(false)} className="text-button text-button--danger">Close X</button>
+            </div>
 
-          <div className="form-group" style={{ marginBottom: '16px', marginTop: '12px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500' }}>Search and Select Existing Patient</label>
-            <Select
-              options={walkInOptions}
-              value={walkInOptions.find(opt => opt.value === walkInPatientId) || null}
-              onChange={handleSelectWalkInPatient}
-              placeholder="Type patient name to search..."
-              isClearable
-              isSearchable
-            />
-          </div>
+            <div style={{ marginTop: '16px' }}>
+              <label style={{ display: 'block', marginBottom: '6px', fontSize: '11px', fontWeight: '700', color: '#57627a' }}>Search and Select Existing Patient</label>
+              <Select
+                options={walkInOptions}
+                value={walkInOptions.find(opt => opt.value === walkInPatientId) || null}
+                onChange={handleSelectWalkInPatient}
+                placeholder="Type patient name to search..."
+                isClearable
+                isSearchable
+              />
+            </div>
 
-          {selectedIntake && (
-            <form onSubmit={handleConfirmIntake} className="scenario-form" style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
-              <h3>Verify Details for: {selectedIntake.patient_name}</h3>
-              <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label>Phone Number</label>
-                <input type="text" value={selectedIntake.phone} onChange={e => setSelectedIntake({ ...selectedIntake, phone: e.target.value })} className="form-control" />
-              </div>
-              <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label>Address</label>
-                <input type="text" value={selectedIntake.address} onChange={e => setSelectedIntake({ ...selectedIntake, address: e.target.value })} className="form-control" />
-              </div>
-              <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label>Insurance Provider</label>
-                <select
-                  value={selectedIntake.insurance_provider_id}
-                  onChange={e => setSelectedIntake({ ...selectedIntake, insurance_provider_id: e.target.value })}
-                  className="form-control"
-                >
-                  <option value="">-- Select Insurance Provider --</option>
-                  {insuranceProviders.map(ip => (
-                    <option key={ip.id} value={ip.id}>{ip.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group" style={{ marginBottom: '16px' }}>
-                <label>Insurance Policy Number</label>
-                <input type="text" value={selectedIntake.insurance_policy_number} onChange={e => setSelectedIntake({ ...selectedIntake, insurance_policy_number: e.target.value })} className="form-control" />
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button type="submit" className="btn btn-success">Confirm Info & Check-In</button>
-                <button type="button" onClick={() => setWalkInModalOpen(false)} className="btn btn-outline-secondary">Cancel</button>
-              </div>
-            </form>
-          )}
-        </section>
+            {selectedIntake && (
+              <form onSubmit={handleConfirmIntake} className="scenario-form" style={{ marginTop: '16px' }}>
+                <h3>Verify Details for: {selectedIntake.patient_name}</h3>
+                <label>
+                  Phone Number
+                  <input type="text" value={selectedIntake.phone} onChange={e => setSelectedIntake({ ...selectedIntake, phone: e.target.value })} />
+                </label>
+                <label>
+                  Address
+                  <input type="text" value={selectedIntake.address} onChange={e => setSelectedIntake({ ...selectedIntake, address: e.target.value })} />
+                </label>
+                <label>
+                  Insurance Provider
+                  <select
+                    value={selectedIntake.insurance_provider_id}
+                    onChange={e => setSelectedIntake({ ...selectedIntake, insurance_provider_id: e.target.value })}
+                  >
+                    <option value="">-- Select Insurance Provider --</option>
+                    {insuranceProviders.map(ip => (
+                      <option key={ip.id} value={ip.id}>{ip.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Insurance Policy Number
+                  <input type="text" value={selectedIntake.insurance_policy_number} onChange={e => setSelectedIntake({ ...selectedIntake, insurance_policy_number: e.target.value })} />
+                </label>
+                <div className="form-actions" style={{ marginTop: '12px' }}>
+                  <button type="submit" className="primary-button">Confirm Info & Check-In</button>
+                  <button type="button" onClick={() => setWalkInModalOpen(false)} className="secondary-button">Cancel</button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Tab 1: Overview Summary */}
       {activeTab === 'overview' && (
-        <section className="instructor-overview-grid">
-          <article className="panel classroom-health-panel">
-            <div className="panel__header">
-              <div><p className="section-label">Workflow</p><h2>Upcoming Scheduled Appointments</h2></div>
-              <span className="directory-live-indicator">● Live Database</span>
-            </div>
-            {intakeQueue.length ? (
-              <div className="classroom-health-list">
-                {intakeQueue.slice(0, 5).map(item => (
-                  <article key={item.appointment_id} style={{ marginBottom: '12px' }}>
-                    <div className="classroom-health-list__heading">
-                      <div><h3>{item.patient_name}</h3><p>{item.reason} · {new Date(item.appointment_date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</p></div>
-                      <span className="badge badge-warning" style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '11px', background: '#fef3c7', color: '#92400e' }}>{item.status}</span>
+        <section className="panel classroom-health-paneld">
+
+          <div className="panel__header">
+            <div><p className="section-label">Workflow</p><h2>Upcoming Scheduled Appointments</h2></div>
+            <span className="directory-live-indicator">● Live Database</span>
+          </div>
+          {intakeQueue.length ? (
+            <div className="classroom-health-list">
+              {intakeQueue.slice(0, 5).map(item => (
+                <article key={item.appointment_id}>
+                  <div className="classroom-health-list__heading">
+                    <div>
+                      <h3>{item.patient_name}</h3>
+                      <p>{item.reason} · {new Date(item.appointment_date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</p>
                     </div>
-                  </article>
-                ))}
-              </div>
-            ) : <p className="directory-loading">No upcoming scheduled appointments found.</p>}
-          </article>
+                    <span className="status-badge status-badge--pending">{item.status}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : <p className="directory-loading">No upcoming scheduled appointments found.</p>}
+
         </section>
       )}
 
@@ -403,27 +400,29 @@ export default function FrontDeskDashboardPage() {
             <div><p className="section-label">Verification</p><h2>Intake Queue (Awaiting Verification & Check-In)</h2></div>
           </div>
           {intakeQueue.length > 0 ? (
-            <div className="table-responsive">
-              <table className="table scenario-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <div className="table-wrap" style={{ marginTop: '16px' }}>
+              <table>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid #e5e7eb', textAlign: 'left' }}>
-                    <th style={{ padding: '10px' }}>Patient / Reason</th>
-                    <th style={{ padding: '10px' }}>Scheduled Time</th>
-                    <th style={{ padding: '10px' }}>Insurance</th>
-                    <th style={{ padding: '10px', textAlign: 'right' }}>Action</th>
+                  <tr>
+                    <th>Patient / Reason</th>
+                    <th>Scheduled Time</th>
+                    <th>Insurance</th>
+                    <th style={{ textAlign: 'right' }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {intakeQueue.map(item => (
-                    <tr key={item.appointment_id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                      <td style={{ padding: '10px' }}>
-                        <strong>{item.patient_name}</strong>
-                        <p style={{ margin: 0, color: '#6b7280', fontSize: '12px' }}>{item.reason}</p>
+                    <tr key={item.appointment_id}>
+                      <td>
+                        <div>
+                          <strong>{item.patient_name}</strong>
+                          <small>{item.reason}</small>
+                        </div>
                       </td>
-                      <td style={{ padding: '10px', fontSize: '13px' }}>{new Date(item.appointment_date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
-                      <td style={{ padding: '10px', fontSize: '13px' }}>{item.insurance_provider_name}</td>
-                      <td style={{ padding: '10px', textAlign: 'right' }}>
-                        <button type="button" onClick={() => setSelectedIntake(item)} className="btn btn-sm btn-primary" style={{ padding: '4px 10px', fontSize: '12px' }}>
+                      <td>{new Date(item.appointment_date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
+                      <td>{item.insurance_provider_name}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button type="button" onClick={() => setSelectedIntake(item)} className="primary-button" style={{ padding: '6px 12px', fontSize: '11px' }}>
                           Verify & Check-In
                         </button>
                       </td>
@@ -434,39 +433,49 @@ export default function FrontDeskDashboardPage() {
             </div>
           ) : <p className="directory-loading">No intakes pending.</p>}
 
+          {/* Verification Modal Overlay */}
           {selectedIntake && !walkInModalOpen && (
-            <form onSubmit={handleConfirmIntake} className="scenario-form" style={{ marginTop: '24px', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
-              <h3>Verify & Check-In: {selectedIntake.patient_name}</h3>
-              <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label>Confirm / Update Phone</label>
-                <input type="text" value={selectedIntake.phone} onChange={e => setSelectedIntake({ ...selectedIntake, phone: e.target.value })} className="form-control" />
+            <div className="account-modal-backdrop">
+              <div className="panel account-detail-modal">
+                <div className="panel__header">
+                  <div>
+                    <p className="section-label">Intake Verification</p>
+                    <h2>Verify & Check-In: {selectedIntake.patient_name}</h2>
+                  </div>
+                  <button type="button" onClick={() => setSelectedIntake(null)} className="text-button text-button--danger">Close X</button>
+                </div>
+                <form onSubmit={handleConfirmIntake} className="scenario-form" style={{ marginTop: '16px' }}>
+                  <label>
+                    Confirm / Update Phone
+                    <input type="text" value={selectedIntake.phone} onChange={e => setSelectedIntake({ ...selectedIntake, phone: e.target.value })} />
+                  </label>
+                  <label>
+                    Confirm / Update Address
+                    <input type="text" value={selectedIntake.address} onChange={e => setSelectedIntake({ ...selectedIntake, address: e.target.value })} />
+                  </label>
+                  <label>
+                    Insurance Provider
+                    <select
+                      value={selectedIntake.insurance_provider_id}
+                      onChange={e => setSelectedIntake({ ...selectedIntake, insurance_provider_id: e.target.value })}
+                    >
+                      <option value="">-- Select Insurance Provider --</option>
+                      {insuranceProviders.map(ip => (
+                        <option key={ip.id} value={ip.id}>{ip.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Confirm / Update Policy Number
+                    <input type="text" value={selectedIntake.insurance_policy_number} onChange={e => setSelectedIntake({ ...selectedIntake, insurance_policy_number: e.target.value })} />
+                  </label>
+                  <div className="form-actions">
+                    <button type="submit" className="primary-button">Save Details & Check-In</button>
+                    <button type="button" onClick={() => setSelectedIntake(null)} className="secondary-button">Cancel</button>
+                  </div>
+                </form>
               </div>
-              <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label>Confirm / Update Address</label>
-                <input type="text" value={selectedIntake.address} onChange={e => setSelectedIntake({ ...selectedIntake, address: e.target.value })} className="form-control" />
-              </div>
-              <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label>Insurance Provider</label>
-                <select
-                  value={selectedIntake.insurance_provider_id}
-                  onChange={e => setSelectedIntake({ ...selectedIntake, insurance_provider_id: e.target.value })}
-                  className="form-control"
-                >
-                  <option value="">-- Select Insurance Provider --</option>
-                  {insuranceProviders.map(ip => (
-                    <option key={ip.id} value={ip.id}>{ip.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group" style={{ marginBottom: '16px' }}>
-                <label>Confirm / Update Policy Number</label>
-                <input type="text" value={selectedIntake.insurance_policy_number} onChange={e => setSelectedIntake({ ...selectedIntake, insurance_policy_number: e.target.value })} className="form-control" />
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button type="submit" className="btn btn-success">Save Details & Check-In</button>
-                <button type="button" onClick={() => setSelectedIntake(null)} className="btn btn-outline-secondary">Cancel</button>
-              </div>
-            </form>
+            </div>
           )}
         </section>
       )}
@@ -478,36 +487,38 @@ export default function FrontDeskDashboardPage() {
             <div><p className="section-label">Queue</p><h2>In-Progress (Checked-In / Waiting Room)</h2></div>
           </div>
           {inProgressQueue.length > 0 ? (
-            <div className="table-responsive">
-              <table className="table scenario-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <div className="table-wrap" style={{ marginTop: '16px' }}>
+              <table>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid #e5e7eb', textAlign: 'left' }}>
-                    <th style={{ padding: '10px' }}>Patient / Reason</th>
-                    <th style={{ padding: '10px' }}>Scheduled Time</th>
-                    <th style={{ padding: '10px' }}>Status</th>
-                    <th style={{ padding: '10px', textAlign: 'right' }}>Actions</th>
+                  <tr>
+                    <th>Patient / Reason</th>
+                    <th>Scheduled Time</th>
+                    <th>Status</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {inProgressQueue.map(item => (
-                    <tr key={item.appointment_id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                      <td style={{ padding: '10px' }}>
-                        <strong>{item.patient_name}</strong>
-                        <p style={{ margin: 0, color: '#6b7280', fontSize: '12px' }}>{item.reason}</p>
+                    <tr key={item.appointment_id}>
+                      <td>
+                        <div>
+                          <strong>{item.patient_name}</strong>
+                          <small>{item.reason}</small>
+                        </div>
                       </td>
-                      <td style={{ padding: '10px', fontSize: '13px' }}>{new Date(item.appointment_date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
-                      <td style={{ padding: '10px' }}>
-                        <span className="badge badge-success" style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '11px', background: '#e0e7ff', color: '#3730a3' }}>
-                          In-Progress
-                        </span>
+                      <td>{new Date(item.appointment_date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
+                      <td>
+                        <span className="status-badge status-badge--active">In-Progress</span>
                       </td>
-                      <td style={{ padding: '10px', textAlign: 'right', display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                        <button type="button" onClick={() => handleCompleteVisit(item.appointment_id)} className="btn btn-sm btn-success" style={{ padding: '4px 10px', fontSize: '12px' }}>
-                          Check-Out / Complete
-                        </button>
-                        <button type="button" onClick={() => handleToggleCheckIn(item.appointment_id, 'Checked-In')} className="btn btn-sm btn-outline-secondary" style={{ padding: '4px 8px', fontSize: '12px' }}>
-                          Undo Check-In
-                        </button>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                          <button type="button" onClick={() => handleCompleteVisit(item.appointment_id)} className="primary-button" style={{ padding: '6px 10px', fontSize: '11px' }}>
+                            Check-Out / Complete
+                          </button>
+                          <button type="button" onClick={() => handleToggleCheckIn(item.appointment_id, 'Checked-In')} className="secondary-button" style={{ padding: '6px 10px', fontSize: '11px' }}>
+                            Undo Check-In
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -525,8 +536,8 @@ export default function FrontDeskDashboardPage() {
             <div><p className="section-label">Booking</p><h2>Schedule Standalone Appointment</h2></div>
           </div>
           <form onSubmit={handleScheduleAppointment} className="scenario-form" style={{ marginTop: '16px' }}>
-            <div className="form-group" style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500' }}>Search and Select Patient</label>
+            <label>
+              Search and Select Patient
               <Select
                 options={allPatientOptions}
                 value={allPatientOptions.find(opt => opt.value === newAppt.patient_id) || null}
@@ -535,28 +546,24 @@ export default function FrontDeskDashboardPage() {
                 isClearable
                 isSearchable
               />
-            </div>
+            </label>
 
-            {/* Pop-up section if pending referrals exist for the selected patient */}
             {patientReferrals.length > 0 && (
-              <div className="form-group" style={{ marginBottom: '16px', padding: '12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '6px' }}>
-                <label style={{ display: 'block', fontWeight: '600', color: '#166534', marginBottom: '6px' }}>
+              <div style={{ padding: '12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px' }}>
+                <label style={{ color: '#166534', fontWeight: '700' }}>
                   Pending Referrals Found ({patientReferrals.length})
                 </label>
-                <p style={{ fontSize: '12px', color: '#15803d', marginBottom: '8px' }}>Select a referral to tie this appointment to, or leave unselected for a standalone visit:</p>
-
+                <p style={{ fontSize: '11px', color: '#15803d', margin: '4px 0 8px' }}>Select a referral to tie this appointment to, or leave unselected for a standalone visit:</p>
                 <select
                   value={selectedReferralId}
                   onChange={(e) => {
                     const refId = e.target.value;
                     setSelectedReferralId(refId);
-                    // Auto-populate the reason if a referral is picked
                     const ref = patientReferrals.find(r => r.id === refId);
                     if (ref && ref.reason) {
                       setNewAppt(prev => ({ ...prev, reason: ref.reason }));
                     }
                   }}
-                  className="form-control"
                 >
                   <option value="">-- None (Standalone Appointment) --</option>
                   {patientReferrals.map(ref => (
@@ -567,17 +574,22 @@ export default function FrontDeskDashboardPage() {
                 </select>
               </div>
             )}
-            <div className="form-group" style={{ marginBottom: '12px' }}>
-              <label>Reason for Visit / Follow-up Note</label>
-              <input type="text" value={newAppt.reason} onChange={e => setNewAppt({ ...newAppt, reason: e.target.value })} placeholder="e.g., Return in 3 weeks per provider notes" className="form-control" required />
+
+            <label>
+              Reason for Visit / Follow-up Note
+              <input type="text" value={newAppt.reason} onChange={e => setNewAppt({ ...newAppt, reason: e.target.value })} placeholder="e.g., Return in 3 weeks per provider notes" required />
+            </label>
+
+            <label>
+              Appointment Date & Time
+              <input type="datetime-local" value={newAppt.appointment_date} onChange={e => setNewAppt({ ...newAppt, appointment_date: e.target.value })} required />
+            </label>
+
+            <div className="form-actions">
+              <button type="submit" className="primary-button" style={{ width: '100%', justifyContent: 'center' }}>
+                Schedule Appointment
+              </button>
             </div>
-            <div className="form-group" style={{ marginBottom: '20px' }}>
-              <label>Appointment Date & Time</label>
-              <input type="datetime-local" value={newAppt.appointment_date} onChange={e => setNewAppt({ ...newAppt, appointment_date: e.target.value })} className="scenario-form select form-control" required />
-            </div>
-            <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '10px' }}>
-              Schedule Appointment
-            </button>
           </form>
         </section>
       )}

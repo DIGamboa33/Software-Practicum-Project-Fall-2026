@@ -24,7 +24,7 @@ async function requireFrontDeskUser(request, response) {
     return { supabaseAdmin, user: authData.user };
 }
 
-// GET /api/front-desk/dashboard - Load front desk data (profiles, records, appointments, insurance providers)
+//Load front desk data (profiles, records, appointments, insurance providers)
 frontdeskRouter.get("/dashboard", async (request, response) => {
     try {
         const context = await requireFrontDeskUser(request, response);
@@ -206,7 +206,7 @@ frontdeskRouter.get("/patients/:patient_id/referrals", async (request, response)
             .from('referrals')
             .select('*')
             .eq('patient_id', patient_id)
-            .eq('status', 'Pending'); // or filter depending on your schema status values
+            .eq('status', 'Pending'); 
         
         if (error) throw error;
         return response.json(data || []);
