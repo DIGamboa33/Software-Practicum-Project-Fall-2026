@@ -570,8 +570,7 @@ export async function fetchFrontDeskDashboard() {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const payload = await response.json();
-  console.log("Fetch dashboard response: ", response)
-  console.log("Fetch dashboard payload: ", payload)
+  
 
   if (!response.ok) {
     throw new Error(payload.message || "Unable to load front desk dashboard.");
@@ -651,6 +650,7 @@ export async function fetchFrontDeskPatientReferrals(patientId) {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const payload = await response.json();
+ 
 
   if (!response.ok) {
     throw new Error(payload.message || "Unable to load patient referrals.");

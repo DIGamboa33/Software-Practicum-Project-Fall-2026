@@ -4,7 +4,8 @@ import {
   fetchFrontDeskDashboard,
   updateFrontDeskAppointmentStatus,
   createFrontDeskAppointment,
-  confirmFrontDeskIntake
+  confirmFrontDeskIntake, 
+  fetchFrontDeskPatientReferrals
 } from '../lib/api';
 
 export default function FrontDeskDashboardPage() {
@@ -529,7 +530,7 @@ export default function FrontDeskDashboardPage() {
               <Select
                 options={allPatientOptions}
                 value={allPatientOptions.find(opt => opt.value === newAppt.patient_id) || null}
-                onChange={(option) => setNewAppt({ ...newAppt, patient_id: option ? option.value : '' })}
+                onChange={handlePatientSelectForScheduling}
                 placeholder="Type patient name to search..."
                 isClearable
                 isSearchable

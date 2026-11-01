@@ -33,18 +33,20 @@ frontdeskRouter.get("/dashboard", async (request, response) => {
         const { supabaseAdmin } = context;
         const nowIso = new Date().toISOString();
 
-        const [profilesRes, recordsRes, appointmentsRes, providersRes] = await Promise.all([
+        const [profilesRes, recordsRes, providersRes ,appointmentsRes] = await Promise.all([
             supabaseAdmin.from('profiles').select('id, first_name, last_name, utep_id, role_id').eq('role_id', 4),
             supabaseAdmin.from('patient_records').select('*'),
+            supabaseAdmin.from('insurance_providers').select('*'),
             supabaseAdmin.schema('patient_portal').from('appointments').select('*').neq('status', 'Completed').order('appointment_date', { ascending: true }),
-            supabaseAdmin.from('insurance_providers').select('*').eq('is_active', true)
+            
         ]);
-
+       
         return response.json({
             profiles: profilesRes.data || [],
             patientRecords: recordsRes.data || [],
-            appointments: appointmentsRes.data || [],
-            insuranceProviders: providersRes.data || []
+            insuranceProviders: providersRes.data || [],
+            appointments: appointmentsRes.data || []
+           
         });
     } catch (error) {
         console.error("Error loading front desk dashboard:", error);
@@ -205,7 +207,7 @@ frontdeskRouter.get("/patients/:patient_id/referrals", async (request, response)
             .select('*')
             .eq('patient_id', patient_id)
             .eq('status', 'Pending'); // or filter depending on your schema status values
-
+        
         if (error) throw error;
         return response.json(data || []);
     } catch (error) {
