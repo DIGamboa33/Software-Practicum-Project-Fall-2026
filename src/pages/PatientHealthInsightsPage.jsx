@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchPatientDashboard, updateReferralAppointment, schedulePatientAppointment } from "../lib/api";
+import { fetchPatientDashboard} from "../lib/api";
 
 function PatientHealthInsightsPage() {
   const [dashboard, setDashboard] = useState(null);
@@ -31,32 +31,7 @@ function PatientHealthInsightsPage() {
     loadData();
   }, []);
 
-  async function handleScheduleReferral(e) {
-    e.preventDefault();
-    if (!selectedReferral) return;
-
-    try {
-      setIsSubmitting(true);
-      // 1. Create the appointment first
-      const newApt = await schedulePatientAppointment({
-        reason: `Specialist Visit: ${selectedReferral.specialty} - ${selectedReferral.reason}`,
-        appointment_date: appointmentDate,
-        location,
-      });
-
-      // 2. Link the referral to this appointment and update status to Approved
-      await updateReferralAppointment(selectedReferral.id, newApt.id);
-
-      setSelectedReferral(null);
-      setReason("");
-      setAppointmentDate("");
-      loadData();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to schedule referral appointment.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
+  
 
   if (isLoading) {
     return (
@@ -193,24 +168,7 @@ const filteredUpdates = updates.filter(u => {
                       {ref.status}
                     </span>
                   </div>
-                  <div>
-                    {ref.status === "Pending" ? (
-                      <button
-                        className="primary-button"
-                        type="button"
-                        onClick={() => {
-                          setSelectedReferral(ref);
-                          setReason(`Consultation: ${ref.specialty}`);
-                        }}
-                      >
-                        Schedule Visit ↗
-                      </button>
-                    ) : (
-                      <span style={{ fontSize: "11px", color: "#48546f", fontWeight: "700" }}>
-                        {ref.linked_appointment_id ? "Appointment Linked ✓" : "In Progress"}
-                      </span>
-                    )}
-                  </div>
+                 
                 </div>
               ))
             )}
@@ -288,57 +246,7 @@ const filteredUpdates = updates.filter(u => {
         </div>
       )}
 
-      {/* Schedule Modal for Pending Referrals */}
-      {selectedReferral && (
-        <div className="sidebar-backdrop" style={{ display: "grid", placeItems: "center", zIndex: 10 }}>
-          <section className="panel" style={{ width: "min(90%, 460px)", padding: "28px" }}>
-            <div className="panel__header">
-              <h2>Schedule Referral Visit</h2>
-              <button className="more-button" type="button" onClick={() => setSelectedReferral(null)}>✕</button>
-            </div>
-            <p className="muted-copy" style={{ marginTop: "8px" }}>
-              Booking specialist appointment for <strong>{selectedReferral.specialty}</strong>.
-            </p>
-            <form onSubmit={handleScheduleReferral} className="scenario-form" style={{ marginTop: "16px" }}>
-              <label>
-                Reason for Visit
-                <input
-                  type="text"
-                  required
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                />
-              </label>
-              <label>
-                Date & Time
-                <input
-                  type="datetime-local"
-                  required
-                  value={appointmentDate}
-                  onChange={(e) => setAppointmentDate(e.target.value)}
-                />
-              </label>
-              <label>
-                Clinic Location / Room
-                <input
-                  type="text"
-                  required
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                />
-              </label>
-              <div className="form-actions" style={{ marginTop: "16px" }}>
-                <button className="secondary-button" type="button" onClick={() => setSelectedReferral(null)}>
-                  Cancel
-                </button>
-                <button className="primary-button" type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? "Booking..." : "Confirm & Link Referral"}
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
-      )}
+      
     </div>
   );
 }
