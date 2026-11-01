@@ -32,6 +32,19 @@ function StudentClassesPage() {
       ignore = true;
     };
   }, []);
+  
+  // temporary handle route to billing and frontdesk
+
+  const handleOpenClassroom = (classroom) => {
+    
+    if (classroom.discipline_subrole_id === 11) {
+      navigate("/student/billing"); 
+    } else if (classroom.discipline_subrole_id === 10) {
+      navigate("/student/frontdesk"); 
+    } else {
+      navigate(`/student/class?id=${classroom.id}`);
+    }
+  };
 
   const classesByTerm = useMemo(() => Object.entries(classes.reduce((totals, classroom) => {
     const term = classroom.term || "Unscheduled";
@@ -92,7 +105,7 @@ function StudentClassesPage() {
                         <button
                             aria-label={`Open ${classroom.full_name}`}
                             className="row-action"
-                            onClick={() => navigate(`/student/class?id=${classroom.id}`)}
+                            onClick={() => handleOpenClassroom(classroom)}
                             type="button"
                         >
                             Details
