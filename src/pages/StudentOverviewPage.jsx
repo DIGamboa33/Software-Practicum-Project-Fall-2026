@@ -1,16 +1,15 @@
+
 import { useEffect, useState } from "react";
 import Icon from "../components/Icon";
 import { fetchStudentCases } from "../lib/api";
 
-function StudentOverviewPage({
-  user,
-  onNavigate,
-}) {
+function StudentOverviewPage({ user, onNavigate }) {
   const [cases, setCases] = useState([]);
   const [casesLoading, setCasesLoading] = useState(true);
   const [casesError, setCasesError] = useState("");
+  const [hoveredCaseId, setHoveredCaseId] = useState(null);
 
-  const firstName = user.name?.split(" ")[0] || "Student";
+  const firstName = user?.name?.split(" ")[0] || "Student";
 
   useEffect(() => {
     let isCurrent = true;
@@ -23,11 +22,13 @@ function StudentOverviewPage({
         const data = await fetchStudentCases();
 
         if (isCurrent) {
-          setCases(data);
+          setCases(Array.isArray(data) ? data : []);
         }
       } catch (error) {
         if (isCurrent) {
-          setCasesError(error.message);
+          setCasesError(
+            error.message || "Unable to load your assigned cases."
+          );
         }
       } finally {
         if (isCurrent) {
@@ -74,57 +75,224 @@ function StudentOverviewPage({
           <h1>Welcome back, {firstName}</h1>
 
           <p>
-            Review available patient scenarios and documentation.
+            Review your assigned patient scenarios and documentation.
           </p>
         </div>
       </section>
 
       <section className="panel data-panel">
         {cases.length === 0 ? (
-          <p>No cases available yet.</p>
+          <p
+            style={{
+              padding: "24px",
+              color: "#64748b",
+            }}
+          >
+            No cases have been assigned to you yet.
+          </p>
         ) : (
-          <div className="table-wrap">
-            <table>
+          <div
+            className="table-wrap"
+            style={{
+              width: "100%",
+              maxWidth: "100%",
+              overflowX: "auto",
+            }}
+          >
+            <table
+              style={{
+                width: "100%",
+                minWidth: 0,
+                tableLayout: "fixed",
+              }}
+            >
+              <colgroup>
+                <col style={{ width: "32%" }} />
+                <col style={{ width: "43%" }} />
+                <col style={{ width: "20%" }} />
+                <col style={{ width: "5%" }} />
+              </colgroup>
+
               <thead>
                 <tr>
                   <th scope="col">Case</th>
                   <th scope="col">Chief complaint</th>
                   <th scope="col">Encounter status</th>
-                  <th scope="col" aria-label="Actions" />
+                  <th
+                    scope="col"
+                    aria-label="Open case"
+                    style={{
+                      position: "sticky",
+                      right: 0,
+                      backgroundColor: "#fff",
+                      zIndex: 2,
+                    }}
+                  />
                 </tr>
               </thead>
 
               <tbody>
-                {cases.map((patientCase) => (
-                  <tr key={patientCase.id}>
-                    <td>
-                      <strong>{patientCase.patient_name}</strong>
-                      <p>-</p>
-                      <strong>{patientCase.title}</strong>
-                    </td>
+                {cases.map((patientCase) => {
+                  const isHovered =
+                    hoveredCaseId === patientCase.id;
 
-                    <td>
-                      {patientCase.chief_complaint}
-                    </td>
+                  const rowBackground = isHovered
+                    ? "#f1f5f9"
+                    : "#fff";
 
-                    <td>
-                      <span className="status-badge">
-                        {patientCase.encounter_status}
-                      </span>
-                    </td>
+                  return (
+                    <tr
+                      key={patientCase.id}
+                      onClick={() => openCase(patientCase)}
+                      onKeyDown={(event) => {
+                        if (
+                          event.target !== event.currentTarget
+                        ) {
+                          return;
+                        }
 
-                    <td>
-                      <button
-                        className="row-action"
-                        type="button"
-                        aria-label={`Open ${patientCase.patient_name}`}
-                        onClick={() => openCase(patientCase)}
+                        if (
+                          event.key === "Enter" ||
+                          event.key === " "
+                        ) {
+                          event.preventDefault();
+                          openCase(patientCase);
+                        }
+                      }}
+                      onMouseEnter={() =>
+                        setHoveredCaseId(patientCase.id)
+                      }
+                      onMouseLeave={() =>
+                        setHoveredCaseId(null)
+                      }
+                      onFocus={() =>
+                        setHoveredCaseId(patientCase.id)
+                      }
+                      onBlur={(event) => {
+                        if (
+                          !event.currentTarget.contains(
+                            event.relatedTarget
+                          )
+                        ) {
+                          setHoveredCaseId(null);
+                        }
+                      }}
+                      tabIndex={0}
+                      aria-label={`Open case for ${patientCase.patient_name}`}
+                      style={{
+                        cursor: "pointer",
+                        backgroundColor: rowBackground,
+                        transition:
+                          "background-color 0.15s ease",
+                      }}
+                    >
+                      {/* PATIENT NAME AND CASE TITLE */}
+                      <td
+                      style={{
+                        whiteSpace: "normal",
+                        verticalAlign: "middle",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "flex-start",
+                          gap: "4px",
+                        }}
                       >
-                        <Icon name="arrow" size={16} />
-                      </button>
+                        <span
+                          style={{
+                            fontSize: "1.125rem",
+                            fontWeight: 700,
+                            color: "#334155",
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          {patientCase.patient_name}
+                        </span>
+
+                        <span
+                          style={{
+                            fontSize: "0.875rem",
+                            fontWeight: 400,
+                            color: "#64748b",
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          {patientCase.title}
+                        </span>
+                      </div>
                     </td>
-                  </tr>
-                ))}
+
+                      {/* CHIEF COMPLAINT */}
+                      <td
+                        style={{
+                          whiteSpace: "normal",
+                          overflowWrap: "anywhere",
+                          verticalAlign: "middle",
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {patientCase.chief_complaint}
+                      </td>
+
+                      {/* ENCOUNTER STATUS */}
+                      <td
+                        style={{
+                          whiteSpace: "normal",
+                          overflowWrap: "anywhere",
+                          verticalAlign: "middle",
+                        }}
+                      >
+                        <span
+                          className="status-badge"
+                          style={{
+                            display: "inline-block",
+                            maxWidth: "100%",
+                            whiteSpace: "normal",
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          {patientCase.encounter_status ||
+                            "Not started"}
+                        </span>
+                      </td>
+
+                      {/* STICKY ARROW */}
+                      <td
+                        style={{
+                          position: "sticky",
+                          right: 0,
+                          backgroundColor: rowBackground,
+                          verticalAlign: "middle",
+                          textAlign: "center",
+                          padding: "8px 4px",
+                          zIndex: 1,
+                          transition:
+                            "background-color 0.15s ease",
+                        }}
+                      >
+                        <button
+                          className="row-action"
+                          type="button"
+                          aria-label={`Open ${patientCase.patient_name}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openCase(patientCase);
+                          }}
+                          style={{
+                            cursor: "pointer",
+                            transition:
+                              "background-color 0.15s ease, color 0.15s ease",
+                          }}
+                        >
+                          <Icon name="arrow" size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
