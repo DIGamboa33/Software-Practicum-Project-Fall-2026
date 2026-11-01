@@ -1941,6 +1941,30 @@ button {
 .instructor-overview-metric--rose::after { background: #d88088; }
 .instructor-overview-metric span, .instructor-overview-metric small { color: #8490a5; font-size: 11px; }
 .instructor-overview-metric strong { display: block; margin: 6px 0 3px; color: #35415e; font-family: Manrope, sans-serif; font-size: 27px; }
+
+/* Patient workspace data visuals and contained lists. */
+.patient-metric-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.patient-metric-heading .icon { color: #6b7fd5; }
+.instructor-overview-metric--teal .patient-metric-heading .icon { color: #42a58f; }
+.instructor-overview-metric--amber .patient-metric-heading .icon { color: #cf913b; }
+.patient-chart-card { margin-top: 17px; }
+.patient-chart-card h2 { margin: 2px 0 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 18px; }
+.patient-chart-canvas { height: 240px; min-width: 0; margin-top: 12px; }
+.patient-chart-canvas--bar { height: 220px; }
+.patient-appointment-insights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 17px; margin-top: 17px; }
+.patient-appointment-insights .patient-chart-card { margin-top: 0; }
+.patient-timeline-card { min-width: 0; }
+.patient-timeline-card h2 { margin: 2px 0 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 18px; }
+.patient-appointment-timeline { display: grid; gap: 0; margin: 17px 0 0; padding: 0; list-style: none; max-height: 240px; overflow-y: auto; scrollbar-gutter: stable; }
+.patient-appointment-timeline li { position: relative; display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 0 0 18px 16px; border-left: 2px solid #dce5fb; }
+.patient-appointment-timeline li::before { position: absolute; top: 2px; left: -5px; width: 8px; height: 8px; content: ""; border: 2px solid #fff; border-radius: 50%; background: #6478d5; box-shadow: 0 0 0 1px #6478d5; }
+.patient-appointment-timeline time { color: #71809a; font-size: 11px; font-weight: 700; }
+.patient-appointment-timeline strong, .patient-appointment-timeline span { display: block; overflow: hidden; color: #40506d; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.patient-appointment-timeline span { margin-top: 4px; color: #8b96a9; font-size: 11px; }
+.patient-appointment-timeline em { color: #65748e; font-size: 10px; font-style: normal; font-weight: 700; white-space: nowrap; }
+.patient-scroll-list { max-height: 420px; overflow-y: auto; scrollbar-gutter: stable; }
+.patient-scroll-grid { max-height: 610px; overflow-y: auto; padding-right: 5px; scrollbar-gutter: stable; }
+.page-heading h1 .icon { vertical-align: -4px; margin-right: 7px; color: #6478d5; }
 .instructor-overview-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(310px, .8fr); gap: 17px; }
 .classroom-health-panel h2, .review-queue-panel h2, .class-selector h2, .classroom-roster-panel h2, .assignment-builder h2, .assignment-table-panel h2 { margin: 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 18px; }
 .preview-label { padding: 5px 8px; border-radius: 20px; color: #5a7b75; background: #eaf7f4; font-size: 10px; font-weight: 800; }
@@ -2076,6 +2100,7 @@ button {
   }
 }
 @media (max-width: 760px) {
+  .patient-appointment-insights { grid-template-columns: 1fr; }
   .role-dashboard__areas {
     grid-template-columns: 1fr;
   }
