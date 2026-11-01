@@ -418,6 +418,14 @@ adminRouter.get("/academics", async (request, response) => {
       supabaseAdmin.from("subroles").select("id, name").order("name"),
     ]);
     if (classroomError || membershipError || enrollmentError || profileError || subroleError) throw classroomError || membershipError || enrollmentError || profileError || subroleError;
+    // Get the accepted disciplines for all classrooms
+    const { data: allowedRows, error: allowedError } = await school
+      .from("classroom_allowed_subroles")
+      .select("classroom_id, subrole_id");
+
+    if (allowedError) {
+      throw allowedError;
+    }
     const profileById = new Map((profiles || []).map((profile) => [profile.id, profile]));
     const instructorsByClass = new Map();
     (memberships || []).forEach((membership) => {
@@ -430,7 +438,7 @@ adminRouter.get("/academics", async (request, response) => {
     const subroleById = new Map((subroles || []).map((subrole) => [subrole.id, subrole.name]));
     return response.json({
       semesters: [...new Set((classrooms || []).map((classroom) => classroom.term))],
-      classrooms: (classrooms || []).map((classroom) => ({ ...classroom, discipline: subroleById.get(classroom.discipline_subrole_id) || "Unassigned", instructors: instructorsByClass.get(classroom.id) || [], studentCount: enrollmentCounts[classroom.id] || 0 })),
+      classrooms: (classrooms || []).map((classroom) => ({ ...classroom, discipline: subroleById.get(classroom.discipline_subrole_id) || "Unassigned", instructors: instructorsByClass.get(classroom.id) || [], studentCount: enrollmentCounts[classroom.id] || 0, allowedSubroleIds: (allowedRows || []).filter((row) => row.classroom_id === classroom.id).map((row) => row.subrole_id) })),
       students: (profiles || []).filter((profile) => getRelationName(profile.roles) === "Student").map((profile) => ({ id: profile.id, name: `${profile.first_name} ${profile.last_name}`.trim(), subrole: getRelationName(profile.subroles), utepId: profile.utep_id || null })),
       instructors: (profiles || []).filter((profile) => getRelationName(profile.roles) === "Instructor").map((profile) => ({ id: profile.id, name: `${profile.first_name} ${profile.last_name}`.trim(), subroleId: profile.sub_role_id, subrole: getRelationName(profile.subroles) })),
       subroles: subroles || [],
@@ -592,14 +600,14 @@ adminRouter.post("/academics/classrooms", async (request, response) => {
           .from("classrooms")
           .delete()
           .eq("id", classroom.id);
-        
-          if (cleanupError) {
-            console.error("Classroom cleanup failed:", cleanupError);
-          }
-      
+
+        if (cleanupError) {
+          console.error("Classroom cleanup failed:", cleanupError);
+        }
+
         throw membershipError;
+      }
     }
-  }
 
     await writeAuditLog(supabaseAdmin, {
       actor_id: actor.id,
@@ -612,6 +620,194 @@ adminRouter.post("/academics/classrooms", async (request, response) => {
     return response.status(500).json({ message: error.message || "Unable to create classroom." });
   }
 });
+
+
+// Derek: Edit accepted disciplines for an existing classroom.
+adminRouter.patch(
+  "/academics/classrooms/:classroomId/allowed-disciplines",
+  async (request, response) => {
+
+    const input = request.body.additionalSubroleIds;
+
+    // Make sure the Admin sent an array.
+    if (!Array.isArray(input) || input.length > 30) {
+      return response.status(400).json({
+        message: "Provide a list of additional disciplines."
+      });
+    }
+
+    const additionalIds = input.map(Number);
+
+    // Validate the numeric IDs.
+    if (additionalIds.some(
+      (id) => !Number.isSafeInteger(id) || id <= 0
+    )) {
+      return response.status(400).json({
+        message: "Invalid discipline IDs."
+      });
+    }
+
+    try {
+      const context = await requireAdmin(request, response);
+      if (!context) return;
+
+      const { supabaseAdmin, actor } = context;
+
+      if (!(await ensureAuditLogReady(supabaseAdmin, response))) {
+        return;
+      }
+
+      const school = supabaseAdmin.schema("school");
+
+      // Step 1: Find the classroom.
+      const { data: classroom, error: classroomError } =
+        await school
+          .from("classrooms")
+          .select("id, short_name, discipline_subrole_id")
+          .eq("id", request.params.classroomId)
+          .maybeSingle();
+
+      if (classroomError) throw classroomError;
+
+      if (!classroom) {
+        return response.status(404).json({
+          message: "Classroom not found."
+        });
+      }
+
+      // Step 2: Always include the primary discipline.
+      const allowedIds = [
+        ...new Set([
+          classroom.discipline_subrole_id,
+          ...additionalIds
+        ])
+      ];
+
+      // Step 3: Confirm these disciplines exist.
+      const { data: validSubroles, error: validError } =
+        await supabaseAdmin
+          .from("subroles")
+          .select("id")
+          .in("id", allowedIds);
+
+      if (validError) throw validError;
+
+      if ((validSubroles || []).length !== allowedIds.length) {
+        return response.status(400).json({
+          message: "One or more disciplines do not exist."
+        });
+      }
+
+      // Step 4: Check the students already enrolled.
+      const { data: enrollments, error: enrollmentError } =
+        await school
+          .from("classroom_enrollments")
+          .select("student_id")
+          .eq("classroom_id", classroom.id)
+          .eq("status", "active");
+
+      if (enrollmentError) throw enrollmentError;
+
+      const enrolledIds = (enrollments || []).map(
+        (row) => row.student_id
+      );
+
+      // Prevent removal of a discipline that currently
+      // has students enrolled in this classroom.
+      if (enrolledIds.length > 0) {
+        const { data: profiles, error: profileError } =
+          await supabaseAdmin
+            .from("profiles")
+            .select("id, sub_role_id")
+            .in("id", enrolledIds);
+
+        if (profileError) throw profileError;
+
+        const hasDisallowedStudent =
+          (profiles || []).length !== enrolledIds.length ||
+          (profiles || []).some(
+            (profile) => !allowedIds.includes(profile.sub_role_id)
+          );
+
+        if (hasDisallowedStudent) {
+          return response.status(409).json({
+            message:
+              "Cannot remove a discipline while its students are enrolled."
+          });
+        }
+      }
+
+      // Step 5: Get the existing accepted disciplines.
+      const { data: existingRows, error: existingError } =
+        await school
+          .from("classroom_allowed_subroles")
+          .select("subrole_id")
+          .eq("classroom_id", classroom.id);
+
+      if (existingError) throw existingError;
+
+      const existingIds = (existingRows || []).map(
+        (row) => row.subrole_id
+      );
+
+      // Determine what needs to be added or removed.
+      const toAdd = allowedIds.filter(
+        (id) => !existingIds.includes(id)
+      );
+
+      const toRemove = existingIds.filter(
+        (id) => !allowedIds.includes(id)
+      );
+
+      // Step 6: Insert newly accepted disciplines.
+      if (toAdd.length > 0) {
+        const rows = toAdd.map((id) => ({
+          classroom_id: classroom.id,
+          subrole_id: id
+        }));
+
+        const { error } = await school
+          .from("classroom_allowed_subroles")
+          .insert(rows);
+
+        if (error) throw error;
+      }
+
+      // Step 7: Remove disciplines no longer accepted.
+      if (toRemove.length > 0) {
+        const { error } = await school
+          .from("classroom_allowed_subroles")
+          .delete()
+          .eq("classroom_id", classroom.id)
+          .in("subrole_id", toRemove);
+
+        if (error) throw error;
+      }
+
+      // Step 8: Record the Admin's change.
+      await writeAuditLog(supabaseAdmin, {
+        actor_id: actor.id,
+        action: "classroom.disciplines_updated",
+        details: {
+          classroomId: classroom.id,
+          allowedSubroleIds: allowedIds
+        }
+      });
+
+      return response.json({
+        message: "Accepted classroom disciplines updated."
+      });
+
+    } catch (error) {
+      console.error("Unable to update disciplines:", error);
+
+      return response.status(500).json({
+        message: "Unable to update accepted disciplines."
+      });
+    }
+  }
+);
+
 
 adminRouter.post("/students/bulk-invite", async (request, response) => {
   const students = Array.isArray(request.body.students) ? request.body.students.slice(0, 100) : [];

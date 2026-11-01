@@ -309,6 +309,139 @@ instructorRouter.get("/classrooms/:classroomId", async (request, response) => {
   }
 });
 
+
+ // Derek: Enroll eligible students in an existing classroom.
+instructorRouter.post(
+  "/classrooms/:classroomId/enrollments",
+  async (request, response) => {
+
+    const input = request.body.studentIds;
+
+    if (
+      !Array.isArray(input) ||
+      input.length === 0 ||
+      input.length > 30 ||
+      input.some((id) => typeof id !== "string" || !id.trim())
+    ) {
+      return response.status(400).json({
+        message: "Select between 1 and 30 students."
+      });
+    }
+
+    // Prevent duplicate student IDs.
+    const studentIds = [...new Set(input)];
+
+    try {
+      // Step 1: Verify the Instructor.
+      const context = await requireInstructor(request, response);
+      if (!context) return;
+
+      // Step 2: Verify their classroom access.
+      const access = await verifyClassroomAccess(
+        context.supabaseAdmin,
+        context.profile,
+        request.params.classroomId
+      );
+
+      if (!access) {
+        return response.status(404).json({
+          message: "Classroom not found."
+        });
+      }
+
+      if (access.classroom.status !== "active") {
+        return response.status(400).json({
+          message: "This classroom is not active."
+        });
+      }
+
+      // Step 3: Find all students eligible for this classroom.
+      const eligible = await eligibleStudentsForClassroom(
+        context.supabaseAdmin,
+        access.classroom.id
+      );
+
+      const eligibleIds = new Set(
+        eligible.map((student) => student.id)
+      );
+
+      // Never trust IDs received from the React form alone.
+      if (!studentIds.every((id) => eligibleIds.has(id))) {
+        return response.status(400).json({
+          message: "One or more students are not eligible."
+        });
+      }
+
+      const school = context.supabaseAdmin.schema("school");
+
+      // Step 4: Check for existing enrollment records.
+      const { data: existing, error: existingError } =
+        await school
+          .from("classroom_enrollments")
+          .select("student_id, status")
+          .eq("classroom_id", access.classroom.id)
+          .in("student_id", studentIds);
+
+      if (existingError) throw existingError;
+
+      // Do not enroll someone who is already active.
+      if ((existing || []).some(
+        (row) => row.status === "active"
+      )) {
+        return response.status(409).json({
+          message: "A selected student is already enrolled."
+        });
+      }
+
+      // Step 5: Reactivate existing inactive enrollments.
+      for (const row of existing || []) {
+        const { error } = await school
+          .from("classroom_enrollments")
+          .update({ status: "active" })
+          .eq("classroom_id", access.classroom.id)
+          .eq("student_id", row.student_id);
+
+        if (error) throw error;
+      }
+
+      // Step 6: Insert students not previously enrolled.
+      const previousIds = new Set(
+        (existing || []).map((row) => row.student_id)
+      );
+
+      const newIds = studentIds.filter(
+        (id) => !previousIds.has(id)
+      );
+
+      if (newIds.length > 0) {
+        const enrollmentRows = newIds.map((studentId) => ({
+          classroom_id: access.classroom.id,
+          student_id: studentId
+        }));
+
+        const { error } = await school
+          .from("classroom_enrollments")
+          .insert(enrollmentRows);
+
+        if (error) throw error;
+      }
+
+      return response.status(201).json({
+        message:
+          `${studentIds.length} student(s) enrolled successfully.`
+      });
+
+    } catch (error) {
+      console.error("Unable to enroll students:", error);
+
+      return response.status(500).json({
+        message: "Unable to enroll students."
+      });
+    }
+  }
+);
+
+
 instructorRouter.post("/classrooms/:classroomId/groups", async (request, response) => {
   const name = String(request.body.name || "").trim();
   const studentIds = [...new Set(Array.isArray(request.body.studentIds) ? request.body.studentIds : [])];

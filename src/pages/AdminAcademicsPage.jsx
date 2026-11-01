@@ -6,8 +6,10 @@ import {
   bulkInviteStudents,
   createAdminClassroom,
   fetchAdminAcademics,
+  updateAdminClassroomDisciplines,
 } from "../lib/api";
 import "./AdminAcademicsPage.css";
+
 
 const initialClassroom = {
   crn: "",
@@ -44,6 +46,7 @@ function AdminAcademicsPage() {
   const [isBulkOpen, setIsBulkOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [classroomForm, setClassroomForm] = useState(initialClassroom);
+  const [editingAllowedIds, setEditingAllowedIds] = useState([]);
   const [bulkRows, setBulkRows] = useState("");
   const [bulkSubroleId, setBulkSubroleId] = useState("");
   const [temporaryCredentials, setTemporaryCredentials] = useState([]);
@@ -174,6 +177,18 @@ function AdminAcademicsPage() {
     });
   }
 
+  // Load the accepted disciplines whenever the Admin
+  // opens a classroom or the classroom data changes.
+  useEffect(() => {
+    const classroom = academics.classrooms.find(
+      (item) => item.id === selectedClassroomId
+    );
+
+    setEditingAllowedIds(
+      (classroom?.allowedSubroleIds || []).map(String)
+    );
+  }, [selectedClassroomId, academics.classrooms]);
+
   function submitBulkStudents(event) {
     event.preventDefault();
     const students = parseStudents(bulkRows, bulkSubroleId);
@@ -192,6 +207,44 @@ function AdminAcademicsPage() {
       return result;
     });
   }
+
+
+  // Add or remove a discipline from the editing selection.
+  function toggleEditedDiscipline(subroleId) {
+    const id = String(subroleId);
+
+    setEditingAllowedIds((current) => {
+      if (current.includes(id)) {
+        return current.filter((item) => item !== id);
+      }
+
+      return [...current, id];
+    });
+  }
+
+  // Save accepted disciplines for the selected classroom.
+  function submitAcceptedDisciplines(event) {
+    event.preventDefault();
+
+    if (!selectedClassroom) return;
+
+    // The backend automatically keeps the primary discipline.
+    // We only send the additional selected disciplines.
+    const additionalIds = editingAllowedIds
+      .filter(
+        (id) =>
+          id !== String(selectedClassroom.discipline_subrole_id)
+      )
+      .map(Number);
+
+    runAction(() =>
+      updateAdminClassroomDisciplines(
+        selectedClassroom.id,
+        additionalIds
+      )
+    );
+  }
+
 
   function submitInstructor(event) {
     event.preventDefault();
@@ -359,6 +412,64 @@ function AdminAcademicsPage() {
             </div>
             <p className="academic-detail-panel__metadata">{selectedClassroom.short_name} · CRN {selectedClassroom.crn} · {selectedClassroom.room || "Room not set"}</p>
             <div className="classroom-stat-line"><span>{selectedClassroom.term}</span><span>{selectedClassroom.discipline}</span><span>{selectedClassroom.studentCount} enrolled</span></div>
+
+            {/* Derek: Edit disciplines for an existing classroom. */}
+            <form
+              className="admin-form"
+              onSubmit={submitAcceptedDisciplines}
+              style={{ margin: "18px 0" }}
+            >
+              <fieldset className="accepted-disciplines">
+                <legend>Edit Accepted Student Disciplines</legend>
+
+                <p>
+                  Choose which disciplines can enroll in this classroom.
+                  The primary discipline must remain selected.
+                </p>
+
+                <div className="accepted-disciplines-grid">
+                  {academics.subroles.map((subrole) => {
+                    const id = String(subrole.id);
+
+                    const isPrimary =
+                      id === String(selectedClassroom.discipline_subrole_id);
+
+                    const isSelected =
+                      isPrimary || editingAllowedIds.includes(id);
+
+                    return (
+                      <label
+                        className="accepted-discipline-option"
+                        key={id}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          disabled={isPrimary || isSaving}
+                          onChange={() => toggleEditedDiscipline(id)}
+                        />
+
+                        <span>
+                          {subrole.name}
+                          {isPrimary ? " (Primary)" : ""}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
+
+              <div className="admin-form__actions">
+                <button
+                  className="primary-button"
+                  disabled={isSaving}
+                  type="submit"
+                >
+                  {isSaving ? "Saving..." : "Save accepted disciplines"}
+                </button>
+              </div>
+            </form>
+
             <section className="academic-classroom-modal__grid">
               <div>
                 <div className="academic-instructor-list"><strong>Assigned instructors</strong>{selectedClassroom.instructors.length ? selectedClassroom.instructors.map((instructor) => <div key={instructor.id}><span>{instructor.name.split(" ").map((part) => part[0]).join("")}</span><p>{instructor.name}<small>{instructor.accessLevel === "owner" ? "Lead instructor" : "Co-instructor"}</small></p></div>) : <p className="directory-loading">No instructor assigned yet.</p>}</div>
