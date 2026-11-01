@@ -1947,13 +1947,13 @@ button {
 .patient-metric-heading .icon { color: #6b7fd5; }
 .instructor-overview-metric--teal .patient-metric-heading .icon { color: #42a58f; }
 .instructor-overview-metric--amber .patient-metric-heading .icon { color: #cf913b; }
-.patient-chart-card { margin-top: 17px; }
+.patient-chart-card { margin-top: 22px; padding: 24px; }
 .patient-chart-card h2 { margin: 2px 0 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 18px; }
-.patient-chart-canvas { height: 240px; min-width: 0; margin-top: 12px; }
-.patient-chart-canvas--bar { height: 220px; }
-.patient-appointment-insights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 17px; margin-top: 17px; }
+.patient-chart-canvas { height: 275px; min-width: 0; margin-top: 18px; }
+.patient-chart-canvas--bar { height: 250px; }
+.patient-appointment-insights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin-top: 22px; }
 .patient-appointment-insights .patient-chart-card { margin-top: 0; }
-.patient-health-insight-charts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 17px; margin-top: 17px; }
+.patient-health-insight-charts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; margin-top: 22px; }
 .patient-health-insight-charts .patient-chart-card { margin-top: 0; }
 .patient-timeline-card { min-width: 0; }
 .patient-timeline-card h2 { margin: 2px 0 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 18px; }
@@ -1969,19 +1969,25 @@ button {
 .page-heading h1 .icon { vertical-align: -4px; margin-right: 7px; color: #6478d5; }
 
 /* Student workspace summaries. */
-.student-dashboard-summary, .student-classes-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(240px, 1.15fr); gap: 14px; padding: 18px 22px; border-bottom: 1px solid #edf0f5; }
-.student-summary-card { display: flex; align-items: flex-start; gap: 11px; min-width: 0; padding: 15px; border: 1px solid #e8ecf4; border-radius: 10px; background: #fbfcff; }
+.student-dashboard-summary, .student-classes-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(300px, 1.25fr); gap: 20px; padding: 24px; border-bottom: 1px solid #edf0f5; }
+.student-summary-card { display: flex; align-items: flex-start; gap: 13px; min-width: 0; padding: 18px; border: 1px solid #e8ecf4; border-radius: 10px; background: #fbfcff; }
 .student-summary-card__icon { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border-radius: 9px; color: #6277d8; background: #edf0ff; }
 .student-summary-card__icon--mint { color: #328d7c; background: #e3f7f1; }
 .student-summary-card span:not(.student-summary-card__icon), .student-summary-card small { display: block; color: #8793a8; font-size: 11px; }
 .student-summary-card strong { display: block; margin: 4px 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 23px; }
-.student-summary-chart { min-width: 0; min-height: 130px; }
+.student-summary-chart { min-width: 0; min-height: 170px; }
 .student-summary-chart h2 { margin: 2px 0 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 15px; }
-.student-summary-chart__canvas { height: 118px; margin-top: 2px; }
+.student-summary-chart__canvas { height: 150px; margin-top: 8px; }
 .student-case-table-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 22px 4px; }
 .student-case-table-heading h2 { margin: 2px 0 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 18px; }
 .student-case-table-heading > span { color: #7e8aa0; font-size: 11px; font-weight: 700; }
 .class-fact__label .icon, .class-detail__card .section-label .icon { vertical-align: -2px; color: #6478d5; }
+
+/* Instructor workspace visuals and scalable roster lists. */
+.instructor-chart-card { margin: 20px 0; padding: 24px; }
+.instructor-chart-card h2 { margin: 2px 0 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 18px; }
+.instructor-chart-canvas { height: 275px; min-width: 0; margin-top: 16px; }
+.instructor-scroll-list { max-height: 420px; overflow-y: auto; scrollbar-gutter: stable; }
 
 @media (max-width: 900px) {
   .student-dashboard-summary, .student-classes-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }

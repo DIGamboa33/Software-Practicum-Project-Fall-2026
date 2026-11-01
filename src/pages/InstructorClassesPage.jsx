@@ -6,6 +6,8 @@ import {
   fetchInstructorClassrooms,
   enrollInstructorStudents,
 } from "../lib/api";
+import Icon from "../components/Icon";
+import Pagination from "../components/Pagination";
 
 function InstructorClassesPage({ user }) {
   const [classrooms, setClassrooms] = useState([]);
@@ -24,6 +26,8 @@ function InstructorClassesPage({ user }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [rosterPage, setRosterPage] = useState(1);
+  const [rosterPerPage, setRosterPerPage] = useState(10);
 
   useEffect(() => {
     let isCurrent = true;
@@ -185,13 +189,17 @@ function InstructorClassesPage({ user }) {
     ),
   );
   const selectedGroup = classroomDetail?.groups.find((group) => group.id === selectedGroupId);
+  const visibleRoster = (classroomDetail?.students || []).slice(
+    (rosterPage - 1) * rosterPerPage,
+    rosterPage * rosterPerPage,
+  );
 
   return (
     <div className="dashboard-page content-page instructor-workspace">
       <section className="page-heading">
         <div>
           <p className="section-label">Instructor workspace · classes</p>
-          <h1>Classes & case assignments</h1>
+          <h1><Icon name="calendar" size={25} /> Classes & case assignments</h1>
           <p>Review your assigned {user.subrole || "discipline"} classrooms, manage learning teams, and prepare students for scenarios.</p>
         </div>
         <span className="preview-label">Classrooms are created by administrators</span>
@@ -230,7 +238,7 @@ function InstructorClassesPage({ user }) {
             </div>
             <label>
               Switch classroom
-              <select onChange={(event) => setClassroomId(event.target.value)} value={classroomId}>
+              <select onChange={(event) => { setClassroomId(event.target.value); setRosterPage(1); }} value={classroomId}>
                 {classrooms.map((item) => <option key={item.id} value={item.id}>{item.short_name}</option>)}
               </select>
             </label>
@@ -242,13 +250,14 @@ function InstructorClassesPage({ user }) {
                 <div><p className="section-label">Roster · {classroom.discipline}</p><h2>Enrolled learners</h2></div>
                 <div className="panel__header-actions">
                   <span className="preview-label">{classroomDetail.students.length} active</span>
-                  <button className="secondary-buttom" disabled={!classroomDetail.availableStudents.length} onClick={() => setIsEnrollOpen(true)} type="button">Enroll learner</button>
-                  <button className="secondary-button" disabled={!classroomDetail.students.length} onClick={() => setIsGroupOpen(true)} type="button">Create group</button>
+                  <button className="secondary-button" disabled={!classroomDetail.availableStudents.length} onClick={() => setIsEnrollOpen(true)} type="button"><Icon name="plus" size={15} /> Enroll learner</button>
+                  <button className="secondary-button" disabled={!classroomDetail.students.length} onClick={() => setIsGroupOpen(true)} type="button"><Icon name="plus" size={15} /> Create group</button>
                 </div>
               </div>
               {classroomDetail.students.length ? (
-                <div className="enrolled-student-list">
-                  {classroomDetail.students.map((student) => {
+                <>
+                  <div className="enrolled-student-list instructor-scroll-list">
+                  {visibleRoster.map((student) => {
                     const groupNames = classroomDetail.groups
                       .filter((group) => group.students.some((member) => member.id === student.id))
                       .map((group) => group.name);
@@ -261,7 +270,9 @@ function InstructorClassesPage({ user }) {
                       </div>
                     );
                   })}
-                </div>
+                  </div>
+                  <Pagination currentPage={rosterPage} itemLabel="enrolled learners" onPageChange={setRosterPage} onPageSizeChange={(size) => { setRosterPerPage(size); setRosterPage(1); }} pageSize={rosterPerPage} totalItems={classroomDetail.students.length} />
+                </>
               ) : <p className="directory-loading">No learners have been enrolled yet.</p>}
             </article>
             <article className="panel assignment-builder">

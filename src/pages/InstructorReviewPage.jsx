@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import ReviewDecisionPanel from "../components/ReviewDecisionPanel";
+import Icon from "../components/Icon";
 
 const STATUS_OPTIONS = [
   "All",
@@ -691,23 +692,26 @@ function InstructorReviewPage() {
             label: "Pending Review",
             value: pendingCount,
             tone: "indigo",
+            icon: "bell",
           },
           {
             label: "Approved",
             value: approvedCount,
             tone: "teal",
+            icon: "chart",
           },
           {
             label: "Returned",
             value: returnedCount,
             tone: "amber",
+            icon: "arrow",
           },
         ].map((metric) => (
           <article
             key={metric.label}
             className={`panel instructor-overview-metric instructor-overview-metric--${metric.tone}`}
           >
-            <span>{metric.label}</span>
+            <div className="patient-metric-heading"><span>{metric.label}</span><Icon name={metric.icon} size={17} /></div>
 
             <strong>
               {loading || error ? "—" : metric.value}
