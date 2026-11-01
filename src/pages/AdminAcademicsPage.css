@@ -1,0 +1,58 @@
+
+/* Derek's Accepted Classroom Disciplines */
+
+.accepted-disciplines {
+  grid-column: 1 / -1;
+  margin: 4px 0;
+  padding: 16px;
+  border: 1px solid #dce2ed;
+  border-radius: 10px;
+}
+
+.accepted-disciplines legend {
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #34405b;
+}
+
+.accepted-disciplines p {
+  margin: 0 0 14px;
+  color: #78869b;
+  font-size: 12px;
+}
+
+.accepted-disciplines-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-form .accepted-discipline-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #e3e8f0;
+  border-radius: 8px;
+  background: #f8faff;
+  cursor: pointer;
+}
+
+.admin-form .accepted-discipline-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.admin-form .accepted-discipline-option span {
+  color: #43516d;
+  font-weight: 600;
+}
+
+@media (max-width: 800px) {
+  .accepted-disciplines-grid {
+    grid-template-columns: 1fr;
+  }
+}

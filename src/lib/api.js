@@ -132,6 +132,29 @@ export function fetchAdminAuditLog() {
   return adminRequest("/audit-log");
 }
 
+
+// Global Audit Log with search and filters
+export function fetchGlobalAuditLog(page = 1, filters = {}) {
+  const params = new URLSearchParams();
+
+  params.set("page", String(page));
+
+  if (filters.search) {
+    params.set("search", filters.search);
+  }
+
+  if (filters.role && filters.role !== "all") {
+    params.set("role", filters.role);
+  }
+
+  if (filters.action && filters.action !== "all") {
+    params.set("action", filters.action);
+  }
+
+  return adminRequest(`/global-audit-log?${params.toString()}`);
+}
+
+
 export function fetchAdminAcademics() {
   return adminRequest("/academics");
 }
@@ -141,6 +164,20 @@ export function createAdminClassroom(classroom) {
     method: "POST",
     body: JSON.stringify(classroom),
   });
+}
+
+// Update accepted disciplines for an existing classroom.
+export function updateAdminClassroomDisciplines(
+  classroomId,
+  additionalSubroleIds
+) {
+  return adminRequest(
+    `/academics/classrooms/${classroomId}/allowed-disciplines`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ additionalSubroleIds })
+    }
+  );
 }
 
 export function assignAdminClassroomInstructor(classroomId, instructorId) {
@@ -181,6 +218,17 @@ export function fetchInstructorClassroom(classroomId) {
 
 export function fetchEligibleInstructorStudents() {
   return instructorRequest("/eligible-students");
+}
+
+// Register eligible students in an existing classroom.
+export function enrollInstructorStudents(classroomId, studentIds) {
+  return instructorRequest(
+    `/classrooms/${classroomId}/enrollments`,
+    {
+      method: "POST",
+      body: JSON.stringify({ studentIds })
+    }
+  );
 }
 
 export function createInstructorClassroomGroup(classroomId, group) {
@@ -289,6 +337,106 @@ export async function saveStudentNote(note) {
   return payload;
 }
 
+export async function updateStudentNote(noteId, updates) {
+  const accessToken = sessionStorage.getItem(
+    "careflow-access-token"
+  );
+
+  if (!accessToken) {
+    throw new Error(
+      "No active session. Please sign in again."
+    );
+  }
+
+  if (!noteId) {
+    throw new Error("Note ID is required.");
+  }
+
+  const response = await fetch(
+    `/api/student/notes/${encodeURIComponent(noteId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(updates),
+    }
+  );
+
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      payload.message || "Unable to update note."
+    );
+  }
+
+  return payload;
+}
+
+export async function submitStudentPharmacyNote(noteId) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+
+  if (!accessToken) {
+    throw new Error("No active session. Please sign in again.");
+  }
+
+  if (!noteId) {
+    throw new Error("Note ID is required.");
+  }
+
+  const response = await fetch(
+    `/api/student/notes/${encodeURIComponent(noteId)}/submit`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      payload.message || "Unable to submit Pharmacy note."
+    );
+  }
+
+  return payload;
+}
+
+export async function deleteStudentPharmacyNote(noteId) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+
+  if (!accessToken) {
+    throw new Error("Please sign in again.");
+  }
+
+  if (!noteId) {
+    throw new Error("Note ID is required.");
+  }
+
+  const response = await fetch(
+    `/api/student/notes/${encodeURIComponent(noteId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+
+  const result = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(result.message || "Unable to delete draft.");
+  }
+
+  return result;
+}
+
 export async function fetchStudentNote(assignmentId) {
   const accessToken = sessionStorage.getItem(
     "careflow-access-token",
@@ -315,6 +463,44 @@ export async function fetchStudentNote(assignmentId) {
     throw new Error(
       payload.message || "Unable to load note.",
     );
+  }
+
+  return payload;
+}
+
+// Fetch all Pharmacy notes for a student's assigned case.
+export async function fetchStudentPharmacyNotes(assignmentId) {
+  const accessToken = sessionStorage.getItem(
+    "careflow-access-token"
+  );
+
+  if (!accessToken) {
+    throw new Error("No active session. Please sign in again.");
+  }
+
+  if (!assignmentId) {
+    throw new Error("Assignment ID is required.");
+  }
+
+  const response = await fetch(
+    `/api/student/notes/${encodeURIComponent(assignmentId)}?scope=pharmacy`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      payload.message || "Unable to load Pharmacy notes."
+    );
+  }
+
+  if (!Array.isArray(payload)) {
+    throw new Error("Unexpected Pharmacy notes response.");
   }
 
   return payload;
@@ -353,7 +539,7 @@ export async function updateStudentCaseStatus(
   if (!response.ok) {
     throw new Error(
       payload.message ||
-        "Unable to update encounter status.",
+      "Unable to update encounter status.",
     );
   }
 
@@ -481,19 +667,19 @@ export async function fetchPatientDashboard() {
   }
 
   const response = await fetch("/api/patient/dashboard", {
-    headers: {Authorization: `Bearer ${accessToken}`},
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
 
   const payload = await response.json();
-  
-  
 
-  if(!response.ok){
+
+
+  if (!response.ok) {
     throw new Error(payload.message || "Unable to load your patient health dashboard");
 
   }
   return payload;
-  
+
 }
 
 export async function fetchPatientCareTeam() {
@@ -560,4 +746,14 @@ export async function fetchPatientVitals() {
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message || "Unable to load vitals.");
   return payload;
+}
+
+export function fetchInstructorPatients() {
+  return instructorRequest("/patients");
+}
+
+export function fetchInstructorPatientDetails(patientId) {
+  return instructorRequest(
+    `/patients/${encodeURIComponent(patientId)}`
+  );
 }

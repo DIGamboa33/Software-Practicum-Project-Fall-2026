@@ -7,6 +7,7 @@ export const instructorNavigation = [
   { id: "review", label: "Review & co-sign", icon: "patients" },
   { id: "feedback", label: "Feedback & grades", icon: "grid" },
   { id: "oversight", label: "Cohort oversight", icon: "chart" },
+  { id: "patients", label: "Patients", icon: "patients" },
   { id: "closeout", label: "Closeout", icon: "calendar" },
 ];
 
@@ -15,7 +16,8 @@ export const adminNavigation = [
   { id: "academics", label: "Semesters & classes", icon: "calendar" },
   { id: "users", label: "Global user search", icon: "patients" },
   {id: "patients", label: "Patients", icon: "patients" },
-  { id: "activity", label: "Classroom & Student Activity", icon: "chart" },
+  { id: "activity", label: "Classroom Activity", icon: "chart" },
+  { id: "audit", label: "Audit Log", icon: "chart" },
 ];
 
 export const patientNavigation = [
