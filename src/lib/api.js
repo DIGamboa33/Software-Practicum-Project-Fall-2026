@@ -679,3 +679,36 @@ export async function updateFrontDeskReferralAppointment(referralId, appointment
 
   return payload;
 }
+
+async function billingRequest(path, options = {}) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  const response = await fetch(`/api/billing${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${accessToken || ""}`,
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message || "Unable to complete billing action.");
+  return payload;
+}
+
+export function fetchBillingDashboard() {
+  return billingRequest("/dashboard");
+}
+
+export function updateClaimStatus(claimId, status) {
+  return billingRequest(`/claims/${claimId}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+}
+
+export function updateClaimCodes(claimId, cpt_code, icd10_code) {
+  return billingRequest(`/claims/${claimId}/codes`, {
+    method: "PATCH",
+    body: JSON.stringify({ cpt_code, icd10_code }),
+  });
+}

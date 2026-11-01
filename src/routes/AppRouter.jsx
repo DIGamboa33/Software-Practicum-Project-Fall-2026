@@ -31,6 +31,7 @@ import PatientCareTeamPage from "../pages/PatientCareTeamPage";
 import PatientAppointmentsPage from "../pages/PatientAppointmentsPage";
 import PatientHealthInsightsPage from "../pages/PatientHealthInsightsPage";
 import FrontDeskDashboardPage from "../pages/FrontDeskDashboardPage";
+import BillingDashboardPage from "../pages/BillingDasboardPage";
 
 import AdminActivityPage from "../pages/AdminActivityPage";
 
@@ -133,6 +134,8 @@ const routesByRole = {
       },
       settings: { path: "/student/settings", Component: SettingsPage },
       frontDesk :{ path: "/student/frontdesk", Component: FrontDeskDashboardPage},
+      billing :  {path: "/student/billing", Component: BillingDashboardPage},
+
     },
   },
 };
