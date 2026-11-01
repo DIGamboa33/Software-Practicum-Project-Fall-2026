@@ -129,6 +129,21 @@
   background: #f3f6fb;
 }
 
+.audit-analytics {
+  margin: 0 0 24px;
+}
+
+.audit-analytics h2 {
+  margin: 2px 0 0;
+  color: #34405b;
+  font-family: Manrope, sans-serif;
+  font-size: 18px;
+}
+
+.admin-visual-canvas--audit {
+  height: 235px;
+}
+
 /* Stack the filters on smaller screens. */
 @media (max-width: 1100px) {
   .global-audit-filters {

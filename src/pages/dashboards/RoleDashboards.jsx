@@ -1,5 +1,16 @@
 import { useEffect, useState } from "react";
+import {
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+} from "recharts";
+import Icon from "../../components/Icon";
 import { fetchAdminUsers } from "../../lib/api";
+
+const ADMIN_CHART_COLORS = ["#6277d8", "#45bca2", "#f0a650", "#a175d8"];
 
 const dashboardContent = {
   Instructor: {
@@ -110,38 +121,46 @@ function AdminOperationsDashboard({ user }) {
       label: "Total accounts",
       value: stats?.totalUsers || 0,
       description: "All Careflow user accounts",
+      icon: "grid",
     },
 
     {
       label: "Patients",
       value: patients,
       description: "Registered patient accounts",
+      icon: "patients",
     },
 
     {
       label: "Instructors",
       value: instructors,
       description: "Instructor accounts",
+      icon: "chart",
     },
 
     {
       label: "Students",
       value: students,
       description: "Student accounts",
+      icon: "calendar",
     },
 
     {
       label: "New this week",
       value: stats?.newThisWeek || 0,
       description: "Accounts created during the last 7 days",
+      icon: "plus",
     },
 
     {
       label: "Instructor cases",
       value: "—",
       description: "Scenario database not connected yet",
+      icon: "grid",
     },
   ];
+
+  const roleBreakdown = stats?.roleBreakdown || [];
 
 
   return (
@@ -174,9 +193,14 @@ function AdminOperationsDashboard({ user }) {
             className="panel role-dashboard__area"
             key={card.label}
           >
-            <p className="section-label">
-              {card.label}
-            </p>
+            <div className="role-dashboard__card-heading">
+              <p className="section-label">
+                {card.label}
+              </p>
+              <span className={`role-dashboard__card-icon role-dashboard__card-icon--${card.icon}`}>
+                <Icon name={card.icon} size={17} />
+              </span>
+            </div>
 
             <h2
               style={{
@@ -194,6 +218,43 @@ function AdminOperationsDashboard({ user }) {
           </article>
         ))}
 
+      </section>
+
+      <section className="panel admin-visual-card admin-operations-chart">
+        <div className="panel__header">
+          <div>
+            <p className="section-label">Account composition</p>
+            <h2>Careflow users by role</h2>
+          </div>
+          <span className="admin-visual-caption">Live directory data</span>
+        </div>
+        {roleBreakdown.length ? (
+          <div className="admin-visual-canvas admin-visual-canvas--donut">
+            <ResponsiveContainer height="100%" width="100%">
+              <PieChart>
+                <Pie
+                  data={roleBreakdown}
+                  dataKey="count"
+                  innerRadius={58}
+                  nameKey="name"
+                  outerRadius={86}
+                  paddingAngle={3}
+                >
+                  {roleBreakdown.map((role, index) => (
+                    <Cell
+                      fill={ADMIN_CHART_COLORS[index % ADMIN_CHART_COLORS.length]}
+                      key={role.name}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => [`${value} accounts`, "Users"]} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <p className="directory-loading">Role distribution will appear once accounts are created.</p>
+        )}
       </section>
 
 

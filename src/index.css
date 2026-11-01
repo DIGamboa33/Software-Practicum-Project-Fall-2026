@@ -80,6 +80,7 @@ button {
   width: 248px;
   height: 100vh;
   padding: 27px 16px 18px;
+  overflow-x: hidden;
   color: #aeb5ca;
   background: #18223d;
 }
@@ -117,12 +118,14 @@ button {
   display: grid;
   gap: 5px;
   margin-top: 49px;
+  min-width: 0;
 }
 .nav-item {
   display: flex;
   align-items: center;
   gap: 13px;
   width: 100%;
+  min-width: 0;
   padding: 12px 14px;
   border: 0;
   border-radius: 9px;
@@ -135,6 +138,10 @@ button {
     color 0.2s,
     background 0.2s,
     transform 0.2s;
+}
+.nav-item span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .nav-item:hover {
   color: #fff;
@@ -1743,6 +1750,12 @@ button {
 .role-dashboard__area {
   min-height: 150px;
 }
+.role-dashboard__card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.role-dashboard__card-icon { display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; border-radius: 9px; color: #6277d8; background: #edf0ff; }
+.role-dashboard__card-icon--patients { color: #2f9c87; background: #e5f7f1; }
+.role-dashboard__card-icon--chart { color: #9d67c6; background: #f4eafd; }
+.role-dashboard__card-icon--calendar { color: #d48637; background: #fff3e4; }
+.role-dashboard__card-icon--plus { color: #4778be; background: #e7f1ff; }
 .role-dashboard__area h2,
 .role-dashboard__notice h2 {
   margin: 0;
@@ -1822,6 +1835,25 @@ button {
 
 .admin-academics-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .admin-academics-actions .secondary-button, .admin-academics-actions .primary-button { display: inline-flex; align-items: center; gap: 7px; }
+.admin-metric-card { display: flex; align-items: center; min-height: 92px; gap: 13px; }
+.directory-metrics.admin-academics-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.admin-metric-card__icon { display: grid; flex: 0 0 38px; width: 38px; height: 38px; place-items: center; border-radius: 11px; }
+.admin-metric-card__icon--purple { color: #6374bf; background: #eef0ff; }
+.admin-metric-card__icon--blue { color: #3b78a7; background: #e8f5ff; }
+.admin-metric-card__icon--mint { color: #438e7a; background: #e7f8f1; }
+.admin-metric-card__icon--orange { color: #b87743; background: #fff1e5; }
+.admin-metric-card > div { display: grid; min-width: 0; align-content: center; }
+.admin-academic-insights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 17px; margin-bottom: 17px; }
+.admin-mini-chart { min-width: 0; }
+.admin-mini-chart .panel__header > .icon { margin-top: 4px; color: #8491ae; }
+.admin-mini-chart h2 { margin: 2px 0 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 18px; }
+.admin-bar-chart { display: grid; gap: 13px; margin-top: 18px; }
+.admin-bar-chart > div { display: grid; grid-template-columns: minmax(82px, .8fr) minmax(80px, 2fr) 25px; gap: 10px; align-items: center; }
+.admin-bar-chart span, .admin-bar-chart strong { overflow: hidden; color: #69758c; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-bar-chart strong { text-align: right; }
+.admin-bar-chart i { height: 8px; overflow: hidden; border-radius: 100px; background: #edf0f7; }
+.admin-bar-chart b { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #7185dc, #9aa9eb); }
+.admin-bar-chart--mint b { background: linear-gradient(90deg, #66bba5, #9bd9cb); }
 .admin-academics-form-panel { margin-bottom: 17px; }
 .admin-academics-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 17px; }
 .admin-academics-toolbar h2, .academic-detail-panel h2, .academic-student-panel h2 { margin: 2px 0 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 18px; }
@@ -1884,7 +1916,7 @@ button {
 .directory-loading { margin: 25px 0 8px; color: #8590a4; font-size: 12px; }
 .directory-row--selected { background: #f5f7ff; }
 .directory-sidebar { display: grid; gap: 17px; }
-.account-modal-backdrop { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(34, 43, 62, .38); backdrop-filter: blur(3px); }
+.account-modal-backdrop { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(24, 34, 61, .12); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
 .account-detail-modal { box-sizing: border-box; width: min(680px, 100%); max-height: min(760px, calc(100vh - 48px)); padding: 24px; overflow-y: auto; box-shadow: 0 26px 72px rgba(37, 48, 72, .28); }
 .account-detail-modal .panel__header { align-items: flex-start; }
 .account-detail-modal dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1909,6 +1941,63 @@ button {
 .instructor-overview-metric--rose::after { background: #d88088; }
 .instructor-overview-metric span, .instructor-overview-metric small { color: #8490a5; font-size: 11px; }
 .instructor-overview-metric strong { display: block; margin: 6px 0 3px; color: #35415e; font-family: Manrope, sans-serif; font-size: 27px; }
+
+/* Patient workspace data visuals and contained lists. */
+.patient-metric-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.patient-metric-heading .icon { color: #6b7fd5; }
+.instructor-overview-metric--teal .patient-metric-heading .icon { color: #42a58f; }
+.instructor-overview-metric--amber .patient-metric-heading .icon { color: #cf913b; }
+.patient-chart-card { margin-top: 22px; padding: 24px; }
+.patient-chart-card h2 { margin: 2px 0 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 18px; }
+.patient-chart-canvas { height: 275px; min-width: 0; margin-top: 18px; }
+.patient-chart-canvas--bar { height: 250px; }
+.patient-appointment-insights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin-top: 22px; }
+.patient-appointment-insights .patient-chart-card { margin-top: 0; }
+.patient-health-insight-charts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; margin-top: 22px; }
+.patient-health-insight-charts .patient-chart-card { margin-top: 0; }
+.patient-timeline-card { min-width: 0; }
+.patient-timeline-card h2 { margin: 2px 0 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 18px; }
+.patient-appointment-timeline { display: grid; gap: 0; margin: 17px 0 0; padding: 0; list-style: none; max-height: 240px; overflow-y: auto; scrollbar-gutter: stable; }
+.patient-appointment-timeline li { position: relative; display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 0 0 18px 16px; border-left: 2px solid #dce5fb; }
+.patient-appointment-timeline li::before { position: absolute; top: 2px; left: -5px; width: 8px; height: 8px; content: ""; border: 2px solid #fff; border-radius: 50%; background: #6478d5; box-shadow: 0 0 0 1px #6478d5; }
+.patient-appointment-timeline time { color: #71809a; font-size: 11px; font-weight: 700; }
+.patient-appointment-timeline strong, .patient-appointment-timeline span { display: block; overflow: hidden; color: #40506d; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.patient-appointment-timeline span { margin-top: 4px; color: #8b96a9; font-size: 11px; }
+.patient-appointment-timeline em { color: #65748e; font-size: 10px; font-style: normal; font-weight: 700; white-space: nowrap; }
+.patient-scroll-list { max-height: 420px; overflow-y: auto; scrollbar-gutter: stable; }
+.patient-scroll-grid { max-height: 610px; overflow-y: auto; padding-right: 5px; scrollbar-gutter: stable; }
+.page-heading h1 .icon { vertical-align: -4px; margin-right: 7px; color: #6478d5; }
+
+/* Student workspace summaries. */
+.student-dashboard-summary, .student-classes-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(300px, 1.25fr); gap: 20px; padding: 24px; border-bottom: 1px solid #edf0f5; }
+.student-summary-card { display: flex; align-items: flex-start; gap: 13px; min-width: 0; padding: 18px; border: 1px solid #e8ecf4; border-radius: 10px; background: #fbfcff; }
+.student-summary-card__icon { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border-radius: 9px; color: #6277d8; background: #edf0ff; }
+.student-summary-card__icon--mint { color: #328d7c; background: #e3f7f1; }
+.student-summary-card span:not(.student-summary-card__icon), .student-summary-card small { display: block; color: #8793a8; font-size: 11px; }
+.student-summary-card strong { display: block; margin: 4px 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 23px; }
+.student-summary-chart { min-width: 0; min-height: 170px; }
+.student-summary-chart h2 { margin: 2px 0 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 15px; }
+.student-summary-chart__canvas { height: 150px; margin-top: 8px; }
+.student-case-table-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 22px 4px; }
+.student-case-table-heading h2 { margin: 2px 0 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 18px; }
+.student-case-table-heading > span { color: #7e8aa0; font-size: 11px; font-weight: 700; }
+.class-fact__label .icon, .class-detail__card .section-label .icon { vertical-align: -2px; color: #6478d5; }
+
+/* Instructor workspace visuals and scalable roster lists. */
+.instructor-chart-card { margin: 20px 0; padding: 24px; }
+.instructor-chart-card h2 { margin: 2px 0 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 18px; }
+.instructor-chart-canvas { height: 275px; min-width: 0; margin-top: 16px; }
+.instructor-scroll-list { max-height: 420px; overflow-y: auto; scrollbar-gutter: stable; }
+
+@media (max-width: 900px) {
+  .student-dashboard-summary, .student-classes-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .student-summary-chart { grid-column: 1 / -1; }
+}
+
+@media (max-width: 560px) {
+  .student-dashboard-summary, .student-classes-summary { grid-template-columns: 1fr; padding: 16px; }
+  .student-summary-chart { grid-column: auto; }
+}
 .instructor-overview-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(310px, .8fr); gap: 17px; }
 .classroom-health-panel h2, .review-queue-panel h2, .class-selector h2, .classroom-roster-panel h2, .assignment-builder h2, .assignment-table-panel h2 { margin: 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 18px; }
 .preview-label { padding: 5px 8px; border-radius: 20px; color: #5a7b75; background: #eaf7f4; font-size: 10px; font-weight: 800; }
@@ -2044,6 +2133,8 @@ button {
   }
 }
 @media (max-width: 760px) {
+  .patient-appointment-insights { grid-template-columns: 1fr; }
+  .patient-health-insight-charts { grid-template-columns: 1fr; }
   .role-dashboard__areas {
     grid-template-columns: 1fr;
   }
@@ -2052,6 +2143,8 @@ button {
   .directory-search input { min-width: 210px; }
   .admin-form { grid-template-columns: 1fr 1fr; }
   .admin-academics-layout { grid-template-columns: 1fr; }
+  .directory-metrics.admin-academics-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-academic-insights { grid-template-columns: 1fr; }
   .academic-classroom-modal__grid { grid-template-columns: 1fr; }
   .instructor-overview-metrics { grid-template-columns: 1fr 1fr; }
   .instructor-overview-grid, .classes-layout { grid-template-columns: 1fr; }
@@ -2062,6 +2155,7 @@ button {
 @media (max-width: 520px) {
   .page-heading:has(.directory-create-button) { align-items: flex-start; gap: 14px; }
   .admin-form { grid-template-columns: 1fr; }
+  .directory-metrics.admin-academics-metrics { grid-template-columns: 1fr; }
   .account-modal-backdrop { align-items: end; padding: 12px; }
   .account-detail-modal { max-height: calc(100vh - 24px); padding: 19px; }
   .account-detail-modal dl { grid-template-columns: 1fr; }
@@ -2383,6 +2477,7 @@ button {
     height: auto;
     margin-inline: 0;
     padding: 12px 14px;
+    white-space: normal;
   }
   .sidebar:hover .nav-item--active,
   .sidebar--pinned .nav-item--active {
@@ -2861,6 +2956,8 @@ button {
 .admin-scroll-list { max-height: 560px; overflow-y: auto; scrollbar-gutter: stable; }
 .pagination-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-top: 1px solid #edf0f5; }
 .pagination-controls > div { display: flex; align-items: center; gap: 8px; }
+.pagination-page-size { display: inline-flex; align-items: center; gap: 5px; color: #8a95a7; font-size: 10px; font-weight: 700; }
+.pagination-page-size select { min-height: 28px; padding: 4px 22px 4px 7px; border: 1px solid #dce2ed; border-radius: 6px; color: #58667d; background: #fff; font: inherit; font-size: 10px; }
 .pagination-controls button { padding: 6px 9px; border: 1px solid #dce2ed; border-radius: 6px; color: #58667d; background: #fff; font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; }
 .pagination-controls button:hover:not(:disabled) { border-color: #aab9dc; color: #495f95; background: #f4f7ff; }
 .pagination-controls button:disabled { color: #b3bac7; background: #f7f8fa; cursor: not-allowed; }
@@ -3991,6 +4088,55 @@ td small {
   white-space: normal;
   overflow-wrap: break-word;
   line-height: 1.4;
+}
+
+/* Shared Recharts containers used across the Admin workspace. */
+.admin-visual-card {
+  min-width: 0;
+}
+
+.admin-visual-card h2 {
+  margin: 2px 0 0;
+  color: #34405b;
+  font-family: Manrope, sans-serif;
+  font-size: 18px;
+}
+
+.admin-visual-caption {
+  color: #7b879c;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.admin-visual-canvas {
+  height: 245px;
+  min-width: 0;
+  margin-top: 12px;
+}
+
+.admin-visual-canvas--compact {
+  height: 210px;
+}
+
+.admin-visual-canvas--academic {
+  height: 220px;
+}
+
+.admin-visual-canvas--donut {
+  max-width: 480px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.admin-operations-chart,
+.admin-patient-status-card {
+  margin-top: 20px;
+}
+
+@media (max-width: 700px) {
+  .admin-visual-canvas {
+    height: 220px;
+  }
 }
 .clinical-summary-grid {
   display: grid;

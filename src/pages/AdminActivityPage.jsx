@@ -1,5 +1,19 @@
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import Pagination from "../components/Pagination";
 import { fetchAdminActivity } from "../lib/api";
 import "./AdminActivityPage.css";
 
@@ -32,6 +46,12 @@ function AdminActivityPage() {
   const [searchText, setSearchText] = useState("");
 
   const [activityFilter, setActivityFilter] = useState("all");
+  const [classroomPage, setClassroomPage] = useState(1);
+  const [classroomPageSize, setClassroomPageSize] = useState(10);
+  const [rosterPage, setRosterPage] = useState(1);
+  const [rosterPageSize, setRosterPageSize] = useState(10);
+  const [activityPage, setActivityPage] = useState(1);
+  const [activityPageSize, setActivityPageSize] = useState(10);
 
   // The student currently selected by the Admin.
   const [selectedStudentId, setSelectedStudentId] = useState(null);
@@ -178,6 +198,36 @@ function AdminActivityPage() {
     return belongsToClassroom && matchesSearch && matchesActivityFilter;
   });
 
+  const classroomEnrollmentData = useMemo(
+    () => visibleClassrooms.map((classroom) => ({
+      name: classroom.short_name || classroom.full_name,
+      students: classroom.studentCount || classroom.students.length,
+    })),
+    [visibleClassrooms],
+  );
+  const noteStatusData = useMemo(() => {
+    const totals = visibleActivity.reduce((counts, item) => {
+      const status = item.noteStatus || "Not Started";
+      counts[status] = (counts[status] || 0) + 1;
+      return counts;
+    }, {});
+
+    return Object.entries(totals).map(([name, value]) => ({ name, value }));
+  }, [visibleActivity]);
+
+  const paginatedClassrooms = visibleClassrooms.slice(
+    (classroomPage - 1) * classroomPageSize,
+    classroomPage * classroomPageSize,
+  );
+  const paginatedStudentRoster = studentRoster.slice(
+    (rosterPage - 1) * rosterPageSize,
+    rosterPage * rosterPageSize,
+  );
+  const paginatedActivity = visibleActivity.slice(
+    (activityPage - 1) * activityPageSize,
+    activityPage * activityPageSize,
+  );
+
   // Find the student selected by the Admin.
   const selectedStudent = studentRoster.find(
     (student) => student.id === selectedStudentId
@@ -198,6 +248,9 @@ function AdminActivityPage() {
   // Update the selected classroom.
   function changeClassroom(event) {
     setSelectedClassroom(event.target.value);
+    setClassroomPage(1);
+    setRosterPage(1);
+    setActivityPage(1);
 
     // Close student details when changing classrooms.
     setSelectedStudentId(null);
@@ -280,6 +333,8 @@ function AdminActivityPage() {
                 onChange={(event) => {
                   setSearchText(event.target.value);
                   setSelectedStudentId(null);
+                  setRosterPage(1);
+                  setActivityPage(1);
                 }}
               />
             </label>
@@ -289,7 +344,10 @@ function AdminActivityPage() {
 
               <select
                 value={activityFilter}
-                onChange={(event) => setActivityFilter(event.target.value)}
+                onChange={(event) => {
+                  setActivityFilter(event.target.value);
+                  setActivityPage(1);
+                }}
               >
                 <option value="all">All Cases</option>
                 <option value="attention">Needs Attention</option>
@@ -301,6 +359,52 @@ function AdminActivityPage() {
             </label>
           </section>
 
+          <section className="admin-activity-analytics">
+            <article className="panel admin-visual-card">
+              <div className="panel__header">
+                <div>
+                  <p className="section-label">Enrollment snapshot</p>
+                  <h2>Students per classroom</h2>
+                </div>
+              </div>
+              {classroomEnrollmentData.length ? (
+                <div className="admin-visual-canvas admin-visual-canvas--activity">
+                  <ResponsiveContainer height="100%" width="100%">
+                    <BarChart data={classroomEnrollmentData} margin={{ left: -20, right: 8, top: 8 }}>
+                      <CartesianGrid stroke="#edf0f5" strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                      <Tooltip formatter={(value) => [`${value} students`, "Enrollment"]} />
+                      <Bar dataKey="students" fill="#6277d8" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : <p>No classroom enrollment data matches the current filters.</p>}
+            </article>
+
+            <article className="panel admin-visual-card">
+              <div className="panel__header">
+                <div>
+                  <p className="section-label">Documentation progress</p>
+                  <h2>SOAP note status mix</h2>
+                </div>
+              </div>
+              {noteStatusData.length ? (
+                <div className="admin-visual-canvas admin-visual-canvas--activity">
+                  <ResponsiveContainer height="100%" width="100%">
+                    <PieChart>
+                      <Pie data={noteStatusData} dataKey="value" innerRadius={48} nameKey="name" outerRadius={72} paddingAngle={3}>
+                        {noteStatusData.map((item, index) => <Cell fill={["#6277d8", "#45bca2", "#f0a650", "#d87070"][index % 4]} key={item.name} />)}
+                      </Pie>
+                      <Tooltip formatter={(value) => [`${value} assignments`, "Cases"]} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : <p>No case activity matches the current filters.</p>}
+            </article>
+          </section>
+
           {/* CLASSROOM TABLE */}
           <section className="panel admin-activity-section">
             <h2>All Classrooms</h2>
@@ -308,7 +412,8 @@ function AdminActivityPage() {
             {visibleClassrooms.length === 0 ? (
               <p>No classrooms found.</p>
             ) : (
-              <div className="table-wrap">
+              <>
+                <div className="table-wrap admin-scroll-table">
                 <table>
                   <thead>
                     <tr>
@@ -323,7 +428,7 @@ function AdminActivityPage() {
                   </thead>
 
                   <tbody>
-                    {visibleClassrooms.map((classroom) => (
+                    {paginatedClassrooms.map((classroom) => (
                       <tr key={classroom.id}>
                         <td>
                           <strong>{classroom.full_name}</strong>
@@ -356,7 +461,19 @@ function AdminActivityPage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+                </div>
+                <Pagination
+                currentPage={classroomPage}
+                itemLabel="classrooms"
+                onPageChange={setClassroomPage}
+                onPageSizeChange={(nextPageSize) => {
+                  setClassroomPageSize(nextPageSize);
+                  setClassroomPage(1);
+                }}
+                pageSize={classroomPageSize}
+                totalItems={visibleClassrooms.length}
+                />
+              </>
             )}
           </section>
 
@@ -381,7 +498,8 @@ function AdminActivityPage() {
               {studentRoster.length === 0 ? (
                 <p>No enrolled students found.</p>
               ) : (
-                <div className="table-wrap">
+                <>
+                  <div className="table-wrap admin-scroll-table">
                   <table>
                     <thead>
                       <tr>
@@ -393,7 +511,7 @@ function AdminActivityPage() {
                     </thead>
 
                     <tbody>
-                      {studentRoster.map((student) => (
+                      {paginatedStudentRoster.map((student) => (
                         <tr
                           key={`${student.classroomId}-${student.id}`}
                         >
@@ -427,7 +545,19 @@ function AdminActivityPage() {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                  </div>
+                  <Pagination
+                  currentPage={rosterPage}
+                  itemLabel="enrollments"
+                  onPageChange={setRosterPage}
+                  onPageSizeChange={(nextPageSize) => {
+                    setRosterPageSize(nextPageSize);
+                    setRosterPage(1);
+                  }}
+                  pageSize={rosterPageSize}
+                  totalItems={studentRoster.length}
+                  />
+                </>
               )}
             </section>
 
@@ -567,7 +697,8 @@ function AdminActivityPage() {
             {visibleActivity.length === 0 ? (
               <p>No student case activity found.</p>
             ) : (
-              <div className="table-wrap">
+              <>
+                <div className="table-wrap admin-scroll-table">
                 <table>
                   <thead>
                     <tr>
@@ -581,7 +712,7 @@ function AdminActivityPage() {
                   </thead>
 
                   <tbody>
-                    {visibleActivity.map((item) => (
+                    {paginatedActivity.map((item) => (
                       <tr key={item.id}>
                         <td>
                           <strong>{item.studentName}</strong>
@@ -608,7 +739,19 @@ function AdminActivityPage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+                </div>
+                <Pagination
+                currentPage={activityPage}
+                itemLabel="case activities"
+                onPageChange={setActivityPage}
+                onPageSizeChange={(nextPageSize) => {
+                  setActivityPageSize(nextPageSize);
+                  setActivityPage(1);
+                }}
+                pageSize={activityPageSize}
+                totalItems={visibleActivity.length}
+                />
+              </>
             )}
           </section>
 

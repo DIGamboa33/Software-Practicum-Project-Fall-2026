@@ -4,6 +4,8 @@ import {
   fetchInstructorPatients,
   fetchInstructorPatientDetails,
 } from "../lib/api";
+import Icon from "../components/Icon";
+import Pagination from "../components/Pagination";
 
 function calculateAge(dateOfBirth) {
   if (!dateOfBirth) return "—";
@@ -69,7 +71,7 @@ function PatientSection({
       {rows.length === 0 ? (
         <p>{emptyMessage}</p>
       ) : (
-        <div className="table-wrap">
+        <div className="table-wrap admin-scroll-table">
           <table>
             <thead>
               <tr>
@@ -113,6 +115,8 @@ export default function InstructorPatientsPage() {
     useState(false);
 
   const [error, setError] = useState("");
+  const [patientPage, setPatientPage] = useState(1);
+  const [patientsPerPage, setPatientsPerPage] = useState(10);
 
   async function loadPatients() {
     try {
@@ -163,6 +167,11 @@ export default function InstructorPatientsPage() {
     setSelectedPatient(null);
   }
 
+  const visiblePatients = patients.slice(
+    (patientPage - 1) * patientsPerPage,
+    patientPage * patientsPerPage,
+  );
+
 
 
   return (
@@ -176,7 +185,7 @@ export default function InstructorPatientsPage() {
             Patient Management
           </p>
 
-          <h1>Patients</h1>
+          <h1><Icon name="patients" size={25} /> Patients</h1>
 
           <p>
             View existing patient records and manage
@@ -227,7 +236,7 @@ export default function InstructorPatientsPage() {
                   <th>Careflow ID</th>
                   <th>Age</th>
                   <th>Sex</th>
-                  
+                  <th />
                 </tr>
               </thead>
 
@@ -235,12 +244,12 @@ export default function InstructorPatientsPage() {
 
                 {patients.length === 0 ? (
                   <tr>
-                    <td colSpan={4}>
+                    <td colSpan={5}>
                       No patients found.
                     </td>
                   </tr>
                 ) : (
-                  patients.map((patient) => (
+                  visiblePatients.map((patient) => (
                     <tr
                       key={patient.id}
                       role="button"
@@ -279,8 +288,19 @@ export default function InstructorPatientsPage() {
                       <td>
                         {patient.sex || "—"}
                       </td>
-
-
+                      <td>
+                        <button
+                          className="row-action"
+                          disabled={detailsLoading}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleViewPatient(patient.id);
+                          }}
+                          type="button"
+                        >
+                          Details
+                        </button>
+                      </td>
 
                     </tr>
                   ))
@@ -291,6 +311,7 @@ export default function InstructorPatientsPage() {
 
           </div>
         )}
+        {!loading && patients.length > 0 && <Pagination currentPage={patientPage} itemLabel="patients" onPageChange={setPatientPage} onPageSizeChange={(size) => { setPatientsPerPage(size); setPatientPage(1); }} pageSize={patientsPerPage} totalItems={patients.length} />}
       </section>
 
       {/* LOADING DETAILS */}

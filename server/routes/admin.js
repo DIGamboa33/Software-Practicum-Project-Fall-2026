@@ -428,10 +428,23 @@ adminRouter.get("/academics", async (request, response) => {
       instructorsByClass.set(membership.classroom_id, current);
     });
     const enrollmentCounts = (enrollments || []).reduce((counts, row) => ({ ...counts, [row.classroom_id]: (counts[row.classroom_id] || 0) + 1 }), {});
+    const studentsByClass = new Map();
+    (enrollments || []).forEach((enrollment) => {
+      const profile = profileById.get(enrollment.student_id);
+      if (!profile || getRelationName(profile.roles) !== "Student") return;
+      const current = studentsByClass.get(enrollment.classroom_id) || [];
+      current.push({
+        id: profile.id,
+        name: `${profile.first_name} ${profile.last_name}`.trim(),
+        subrole: getRelationName(profile.subroles),
+        utepId: profile.utep_id || null,
+      });
+      studentsByClass.set(enrollment.classroom_id, current);
+    });
     const subroleById = new Map((subroles || []).map((subrole) => [subrole.id, subrole.name]));
     return response.json({
       semesters: [...new Set((classrooms || []).map((classroom) => classroom.term))],
-      classrooms: (classrooms || []).map((classroom) => ({ ...classroom, discipline: subroleById.get(classroom.discipline_subrole_id) || "Unassigned", instructors: instructorsByClass.get(classroom.id) || [], studentCount: enrollmentCounts[classroom.id] || 0, allowedSubroleIds: (allowedRows || []).filter((row) => row.classroom_id === classroom.id).map((row) => row.subrole_id) })),
+      classrooms: (classrooms || []).map((classroom) => ({ ...classroom, discipline: subroleById.get(classroom.discipline_subrole_id) || "Unassigned", instructors: instructorsByClass.get(classroom.id) || [], students: studentsByClass.get(classroom.id) || [], studentCount: enrollmentCounts[classroom.id] || 0, allowedSubroleIds: (allowedRows || []).filter((row) => row.classroom_id === classroom.id).map((row) => row.subrole_id) })),
       students: (profiles || []).filter((profile) => getRelationName(profile.roles) === "Student").map((profile) => ({ id: profile.id, name: `${profile.first_name} ${profile.last_name}`.trim(), subrole: getRelationName(profile.subroles), utepId: profile.utep_id || null })),
       instructors: (profiles || []).filter((profile) => getRelationName(profile.roles) === "Instructor").map((profile) => ({ id: profile.id, name: `${profile.first_name} ${profile.last_name}`.trim(), subroleId: profile.sub_role_id, subrole: getRelationName(profile.subroles) })),
       subroles: subroles || [],
@@ -877,6 +890,126 @@ adminRouter.post("/students/bulk-invite", async (request, response) => {
   }
 });
 
+adminRouter.post("/patients/bulk-create", async (request, response) => {
+  const patients = Array.isArray(request.body.patients)
+    ? request.body.patients.slice(0, 100)
+    : [];
+
+  if (!patients.length) {
+    return response.status(400).json({
+      message: "Add at least one patient before creating accounts.",
+    });
+  }
+
+  try {
+    const context = await requireAdmin(request, response);
+    if (!context) return;
+
+    const { supabaseAdmin, actor } = context;
+    if (!(await ensureAuditLogReady(supabaseAdmin, response))) return;
+
+    const { data: patientRole, error: roleError } = await supabaseAdmin
+      .from("roles")
+      .select("id")
+      .eq("name", "Patient")
+      .single();
+
+    if (roleError || !patientRole) {
+      throw roleError || new Error("Patient role is not configured.");
+    }
+
+    const created = [];
+    const failed = [];
+
+    for (const entry of patients) {
+      const firstName = String(entry.firstName || "").trim();
+      const lastName = String(entry.lastName || "").trim();
+      const utepId = String(entry.utepId || "").trim() || null;
+
+      if (!firstName || !lastName) {
+        failed.push({
+          name: `${firstName} ${lastName}`.trim() || "Unnamed patient",
+          message: "A first and last name are required.",
+        });
+        continue;
+      }
+
+      const temporaryPassword = generateTemporaryPassword();
+      let email = "";
+      let authData = null;
+      let authError = null;
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        email = makeCareflowEmail(firstName, lastName);
+        const result = await supabaseAdmin.auth.admin.createUser({
+          email,
+          password: temporaryPassword,
+          email_confirm: true,
+          user_metadata: {
+            first_name: firstName,
+            last_name: lastName,
+            display_name: `${firstName} ${lastName}`,
+            must_change_password: true,
+          },
+        });
+        authData = result.data;
+        authError = result.error;
+
+        if (!authError || !/already registered|already exists|duplicate/i.test(authError.message || "")) {
+          break;
+        }
+      }
+
+      if (authError || !authData?.user) {
+        failed.push({
+          name: `${firstName} ${lastName}`,
+          message: authError?.message || "Unable to create the Auth account.",
+        });
+        continue;
+      }
+
+      const { error: profileError } = await supabaseAdmin.from("profiles").insert({
+        id: authData.user.id,
+        first_name: firstName,
+        last_name: lastName,
+        utep_id: utepId,
+        role_id: patientRole.id,
+        sub_role_id: null,
+      });
+
+      if (profileError) {
+        await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+        failed.push({ name: `${firstName} ${lastName}`, message: profileError.message });
+        continue;
+      }
+
+      await writeAuditLog(supabaseAdmin, {
+        actor_id: actor.id,
+        target_user_id: authData.user.id,
+        action: "patient.bulk_created",
+        details: { email },
+      });
+      created.push({
+        id: authData.user.id,
+        name: `${firstName} ${lastName}`,
+        email,
+        temporaryPassword,
+      });
+    }
+
+    return response.status(201).json({
+      created,
+      failed,
+      message: `${created.length} patient account${created.length === 1 ? "" : "s"} created.`,
+    });
+  } catch (error) {
+    console.error("Unable to bulk create patients:", error);
+    return response.status(500).json({
+      message: error.message || "Unable to create patient accounts.",
+    });
+  }
+});
+
 adminRouter.post("/academics/classrooms/:classroomId/instructors", async (request, response) => {
   try {
     const context = await requireAdmin(request, response);
@@ -1136,8 +1269,11 @@ adminRouter.get("/global-audit-log", async (request, response) => {
     const database = context.supabaseAdmin;
 
     // Step 2: Get the global audit log from the database.
-    // We will only show 20 events per page
-    const pageSize = 20;
+    // Allow a small set of safe page sizes for the Admin table.
+    const requestedPageSize = Number(request.query.pageSize);
+    const pageSize = [5, 10, 20, 50].includes(requestedPageSize)
+      ? requestedPageSize
+      : 20;
     const requestedPage = Number(request.query.page);
     const page = Number.isSafeInteger(requestedPage)
       ? Math.max(1, Math.min(requestedPage, 1000))

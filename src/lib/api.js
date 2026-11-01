@@ -139,6 +139,10 @@ export function fetchGlobalAuditLog(page = 1, filters = {}) {
 
   params.set("page", String(page));
 
+  if (filters.pageSize) {
+    params.set("pageSize", String(filters.pageSize));
+  }
+
   if (filters.search) {
     params.set("search", filters.search);
   }
@@ -191,6 +195,13 @@ export function bulkInviteStudents(students) {
   return adminRequest("/students/bulk-invite", {
     method: "POST",
     body: JSON.stringify({ students }),
+  });
+}
+
+export function bulkCreatePatients(patients) {
+  return adminRequest("/patients/bulk-create", {
+    method: "POST",
+    body: JSON.stringify({ patients }),
   });
 }
 
@@ -756,155 +767,4 @@ export function fetchInstructorPatientDetails(patientId) {
   return instructorRequest(
     `/patients/${encodeURIComponent(patientId)}`
   );
-}
-
-export async function fetchFrontDeskDashboard() {
-  const accessToken = sessionStorage.getItem("careflow-access-token");
-  if (!accessToken) throw new Error("No active session. Please sign in again.");
-
-  const response = await fetch("/api/front-desk/dashboard", {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  const payload = await response.json();
-  
-
-  if (!response.ok) {
-    throw new Error(payload.message || "Unable to load front desk dashboard.");
-  }
-
-  return payload;
-}
-
-export async function updateFrontDeskAppointmentStatus(appointmentId, status) {
-  const accessToken = sessionStorage.getItem("careflow-access-token");
-  if (!accessToken) throw new Error("No active session. Please sign in again.");
-
-  const response = await fetch(`/api/front-desk/appointments/${appointmentId}/status`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ status }),
-  });
-  const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.message || "Unable to update appointment status.");
-  }
-
-  return payload;
-}
-
-export async function createFrontDeskAppointment(appointmentData) {
-  const accessToken = sessionStorage.getItem("careflow-access-token");
-  if (!accessToken) throw new Error("No active session. Please sign in again.");
-
-  const response = await fetch("/api/front-desk/appointments", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify(appointmentData),
-  });
-  const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.message || "Unable to schedule appointment.");
-  }
-
-  return payload;
-}
-
-export async function confirmFrontDeskIntake(intakeData) {
-  const accessToken = sessionStorage.getItem("careflow-access-token");
-  if (!accessToken) throw new Error("No active session. Please sign in again.");
-
-  const response = await fetch("/api/front-desk/intakes/confirm", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify(intakeData),
-  });
-  const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.message || "Unable to confirm patient intake.");
-  }
-
-  return payload;
-}
-
-export async function fetchFrontDeskPatientReferrals(patientId) {
-  const accessToken = sessionStorage.getItem("careflow-access-token");
-  if (!accessToken) throw new Error("No active session. Please sign in again.");
-
-  const response = await fetch(`/api/front-desk/patients/${encodeURIComponent(patientId)}/referrals`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  const payload = await response.json();
- 
-
-  if (!response.ok) {
-    throw new Error(payload.message || "Unable to load patient referrals.");
-  }
-
-  return payload;
-}
-
-export async function updateFrontDeskReferralAppointment(referralId, appointmentId) {
-  const accessToken = sessionStorage.getItem("careflow-access-token");
-  if (!accessToken) throw new Error("No active session. Please sign in again.");
-
-  const response = await fetch(`/api/front-desk/referrals/${referralId}/schedule`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ appointment_id: appointmentId }),
-  });
-  const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.message || "Unable to update referral status.");
-  }
-
-  return payload;
-}
-
-async function billingRequest(path, options = {}) {
-  const accessToken = sessionStorage.getItem("careflow-access-token");
-  const response = await fetch(`/api/billing${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${accessToken || ""}`,
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
-  });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.message || "Unable to complete billing action.");
-  return payload;
-}
-
-export function fetchBillingDashboard() {
-  return billingRequest("/dashboard");
-}
-
-export function updateClaimStatus(claimId, status) {
-  return billingRequest(`/claims/${claimId}/status`, {
-    method: "PATCH",
-    body: JSON.stringify({ status }),
-  });
-}
-
-export function updateClaimCodes(claimId, cpt_code, icd10_code) {
-  return billingRequest(`/claims/${claimId}/codes`, {
-    method: "PATCH",
-    body: JSON.stringify({ cpt_code, icd10_code }),
-  });
 }
