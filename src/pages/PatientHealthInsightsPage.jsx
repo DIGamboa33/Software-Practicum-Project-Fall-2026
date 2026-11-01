@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import Icon from "../components/Icon";
 import Pagination from "../components/Pagination";
 import { fetchPatientDashboard, updateReferralAppointment, schedulePatientAppointment } from "../lib/api";
@@ -96,6 +96,24 @@ function PatientHealthInsightsPage() {
     counts[category] = (counts[category] || 0) + 1;
     return counts;
   }, {})).map(([name, count]) => ({ name, updates: count }));
+  const updatesOverTime = Object.entries(updates.reduce((counts, update) => {
+    const date = new Date(update.created_at);
+    if (Number.isNaN(date.getTime())) return counts;
+    const key = date.toISOString().slice(0, 10);
+    counts[key] = (counts[key] || 0) + 1;
+    return counts;
+  }, {}))
+    .sort(([firstDate], [secondDate]) => firstDate.localeCompare(secondDate))
+    .slice(-8)
+    .map(([date, count]) => ({
+      date: new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      updates: count,
+    }));
+  const referralStatusData = Object.entries(referrals.reduce((counts, referral) => {
+    const status = referral.status || "Unspecified";
+    counts[status] = (counts[status] || 0) + 1;
+    return counts;
+  }, {})).map(([name, count]) => ({ name, referrals: count }));
   const visibleUpdates = filteredUpdates.slice((updatePage - 1) * updatesPerPage, updatePage * updatesPerPage);
   const visibleReferrals = referrals.slice((referralPage - 1) * referralsPerPage, referralPage * referralsPerPage);
 
@@ -138,11 +156,27 @@ function PatientHealthInsightsPage() {
         </div>
       </div>
 
-      <section className="panel patient-chart-card">
-        <div className="panel__header"><div><p className="section-label">Clinical activity</p><h2>Updates by category</h2></div><Icon name="chart" size={19} /></div>
-        {updateCategoryData.length ? (
-          <div className="patient-chart-canvas patient-chart-canvas--bar"><ResponsiveContainer height="100%" width="100%"><BarChart data={updateCategoryData} margin={{ left: -18, right: 8, top: 8 }}><CartesianGrid stroke="#edf0f5" strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} tick={{ fontSize: 11 }} /><Tooltip formatter={(value) => [`${value} updates`, "Count"]} /><Bar dataKey="updates" fill="#a175d8" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div>
-        ) : <p className="directory-loading">Clinical update trends will appear when records are added.</p>}
+      <section className="patient-health-insight-charts">
+        <article className="panel patient-chart-card">
+          <div className="panel__header"><div><p className="section-label">Clinical activity</p><h2>Updates by category</h2></div><Icon name="chart" size={19} /></div>
+          {updateCategoryData.length ? (
+            <div className="patient-chart-canvas"><ResponsiveContainer height="100%" width="100%"><PieChart><Pie data={updateCategoryData} dataKey="updates" innerRadius={52} nameKey="name" outerRadius={78} paddingAngle={3}>{updateCategoryData.map((item, index) => <Cell fill={["#a175d8", "#6277d8", "#45bca2", "#f0a650"][index % 4]} key={item.name} />)}</Pie><Tooltip formatter={(value) => [`${value} updates`, "Count"]} /><Legend /></PieChart></ResponsiveContainer></div>
+          ) : <p className="directory-loading">Clinical categories will appear when records are added.</p>}
+        </article>
+
+        <article className="panel patient-chart-card">
+          <div className="panel__header"><div><p className="section-label">Clinical activity</p><h2>Update timeline</h2></div><Icon name="calendar" size={19} /></div>
+          {updatesOverTime.length ? (
+            <div className="patient-chart-canvas"><ResponsiveContainer height="100%" width="100%"><LineChart data={updatesOverTime} margin={{ left: -20, right: 8, top: 12 }}><CartesianGrid stroke="#edf0f5" strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: 10 }} /><YAxis allowDecimals={false} tick={{ fontSize: 11 }} /><Tooltip formatter={(value) => [`${value} updates`, "Recorded"]} /><Line dataKey="updates" dot={{ r: 4, fill: "#6277d8" }} stroke="#6277d8" strokeWidth={3} type="monotone" /></LineChart></ResponsiveContainer></div>
+          ) : <p className="directory-loading">A timeline will appear once updates have recorded dates.</p>}
+        </article>
+
+        <article className="panel patient-chart-card">
+          <div className="panel__header"><div><p className="section-label">Care coordination</p><h2>Referral status</h2></div><Icon name="patients" size={19} /></div>
+          {referralStatusData.length ? (
+            <div className="patient-chart-canvas"><ResponsiveContainer height="100%" width="100%"><PieChart><Pie data={referralStatusData} dataKey="referrals" innerRadius={52} nameKey="name" outerRadius={78} paddingAngle={3}>{referralStatusData.map((item, index) => <Cell fill={["#45bca2", "#f0a650", "#6277d8", "#d87070"][index % 4]} key={item.name} />)}</Pie><Tooltip formatter={(value) => [`${value} referrals`, "Count"]} /><Legend /></PieChart></ResponsiveContainer></div>
+          ) : <p className="directory-loading">Referral status will appear when referrals are added.</p>}
+        </article>
       </section>
 
       {/* Tab 1: Clinical Updates with Category Filters */}

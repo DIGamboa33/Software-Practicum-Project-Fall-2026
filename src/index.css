@@ -1953,6 +1953,8 @@ button {
 .patient-chart-canvas--bar { height: 220px; }
 .patient-appointment-insights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 17px; margin-top: 17px; }
 .patient-appointment-insights .patient-chart-card { margin-top: 0; }
+.patient-health-insight-charts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 17px; margin-top: 17px; }
+.patient-health-insight-charts .patient-chart-card { margin-top: 0; }
 .patient-timeline-card { min-width: 0; }
 .patient-timeline-card h2 { margin: 2px 0 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 18px; }
 .patient-appointment-timeline { display: grid; gap: 0; margin: 17px 0 0; padding: 0; list-style: none; max-height: 240px; overflow-y: auto; scrollbar-gutter: stable; }
@@ -2101,6 +2103,7 @@ button {
 }
 @media (max-width: 760px) {
   .patient-appointment-insights { grid-template-columns: 1fr; }
+  .patient-health-insight-charts { grid-template-columns: 1fr; }
   .role-dashboard__areas {
     grid-template-columns: 1fr;
   }
