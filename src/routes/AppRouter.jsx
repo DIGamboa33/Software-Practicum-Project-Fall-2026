@@ -30,6 +30,7 @@ import PatientOverviewPage from "../pages/PatientOverviewPage";
 import PatientCareTeamPage from "../pages/PatientCareTeamPage";
 import PatientAppointmentsPage from "../pages/PatientAppointmentsPage";
 import PatientHealthInsightsPage from "../pages/PatientHealthInsightsPage";
+import FrontDeskDashboardPage from "../pages/FrontDeskDashboardPage";
 
 import AdminActivityPage from "../pages/AdminActivityPage";
 
@@ -131,6 +132,7 @@ const routesByRole = {
         Component: StudentSubmissionPage,
       },
       settings: { path: "/student/settings", Component: SettingsPage },
+      frontDesk :{ path: "/student/frontdesk", Component: FrontDeskDashboardPage},
     },
   },
 };
