@@ -787,6 +787,17 @@ function cleanCriteria(value) {
     .slice(0, 30);
 }
 
+function ageFromDob(dob) {
+  const birth = new Date(`${dob}T00:00:00Z`);
+  const now = new Date();
+  let age = now.getUTCFullYear() - birth.getUTCFullYear();
+  const hadBirthday =
+    now.getUTCMonth() > birth.getUTCMonth() ||
+    (now.getUTCMonth() === birth.getUTCMonth() && now.getUTCDate() >= birth.getUTCDate());
+  if (!hadBirthday) age -= 1;
+  return age;
+}
+
 instructorRouter.post("/classrooms/:classroomId/assignments", async (request, response) => {
   try {
     const context = await requireInstructor(request, response);
@@ -824,6 +835,20 @@ instructorRouter.post("/classrooms/:classroomId/assignments", async (request, re
       if (!Number.isInteger(patientAge) || patientAge < 0 || patientAge > 120) {
         return response.status(400).json({ message: "Age must be a whole number from 0 to 120." });
       }
+    }
+
+        let dateOfBirth = null;
+    if (input.dateOfBirth) {
+      const dob = String(input.dateOfBirth).trim();
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(dob) ||
+        Number.isNaN(Date.parse(`${dob}T00:00:00Z`)) ||
+        dob > new Date().toISOString().slice(0, 10)
+      ) {
+        return response.status(400).json({ message: "Enter a valid date of birth." });
+      }
+      dateOfBirth = dob;
+      if (patientAge === null) patientAge = ageFromDob(dob);
     }
 
     const criteria = cleanCriteria(expectations.rubricCriteria);
@@ -866,6 +891,7 @@ instructorRouter.post("/classrooms/:classroomId/assignments", async (request, re
         title,
         patient_name: patientName,
         patient_age: patientAge,
+        date_of_birth: dateOfBirth,
         patient_sex: cleanText(input.patientSex, 40) || null,
         chief_complaint: cleanText(input.chiefComplaint, 500) || null,
         history: cleanText(input.history, 2000) || null,
@@ -944,6 +970,85 @@ instructorRouter.post("/classrooms/:classroomId/assignments", async (request, re
     return response.status(500).json({ message: "Unable to assign this case." });
   }
 });
+
+// ---- List the cases assigned in a classroom ----
+instructorRouter.get("/classrooms/:classroomId/assignments", async (request, response) => {
+  try {
+    const context = await requireInstructor(request, response);
+    if (!context) return;
+    const { supabaseAdmin: admin, profile } = context;
+
+    const access = await verifyClassroomAccess(admin, profile, request.params.classroomId);
+    if (!access) return response.status(404).json({ message: "Classroom not found." });
+
+    const learning = admin.schema("learning");
+    const { data: assignments, error } = await learning
+      .from("student_case_assignments")
+      .select("id, student_id, case_id, encounter_status, note_type, due_at, created_at")
+      .eq("classroom_id", access.classroom.id)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    if (!assignments?.length) return response.json({ assignments: [] });
+
+    const caseIds = [...new Set(assignments.map((item) => item.case_id))];
+    const studentIds = [...new Set(assignments.map((item) => item.student_id))];
+    const assignmentIds = assignments.map((item) => item.id);
+
+    const [casesResult, studentsResult, notesResult] = await Promise.all([
+      learning.from("cases").select("id, title, patient_name").in("id", caseIds),
+      admin.from("profiles").select("id, first_name, last_name").in("id", studentIds),
+      learning
+        .from("notes")
+        .select("assignment_id, status, updated_at")
+        .in("assignment_id", assignmentIds)
+        .order("updated_at", { ascending: false }),
+    ]);
+    const queryError = casesResult.error || studentsResult.error || notesResult.error;
+    if (queryError) throw queryError;
+
+    const casesById = new Map((casesResult.data || []).map((item) => [item.id, item]));
+    const namesById = new Map(
+      (studentsResult.data || []).map((item) => [
+        item.id,
+        `${item.first_name || ""} ${item.last_name || ""}`.trim(),
+      ]),
+    );
+    const noteStatusByAssignment = new Map();
+    for (const note of notesResult.data || []) {
+      if (!noteStatusByAssignment.has(note.assignment_id)) {
+        noteStatusByAssignment.set(note.assignment_id, note.status); // newest first
+      }
+    }
+
+    // One row per case, with its students underneath
+    const byCase = new Map();
+    for (const item of assignments) {
+      const patientCase = casesById.get(item.case_id);
+      const entry = byCase.get(item.case_id) || {
+        caseId: item.case_id,
+        title: patientCase?.title || "Untitled case",
+        patientName: patientCase?.patient_name || "Unknown patient",
+        noteType: item.note_type,
+        dueAt: item.due_at,
+        createdAt: item.created_at,
+        students: [],
+      };
+      entry.students.push({
+        assignmentId: item.id,
+        name: namesById.get(item.student_id) || "Unknown student",
+        encounterStatus: item.encounter_status,
+        noteStatus: noteStatusByAssignment.get(item.id) || "Not started",
+      });
+      byCase.set(item.case_id, entry);
+    }
+
+    return response.json({ assignments: [...byCase.values()] });
+  } catch (error) {
+    console.error("Unable to load assigned cases:", error.message || error);
+    return response.status(500).json({ message: "Unable to load assigned cases." });
+  }
+});
+
 // GET /api/instructor/patients
 // Retrieve existing patients with their demographic records.
 instructorRouter.get("/patients", async (request, response) => {

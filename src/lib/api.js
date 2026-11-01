@@ -211,6 +211,10 @@ export function updateInstructorDueDate(classroomId, caseId, body) {
   });
 }
 
+export function fetchInstructorAssignments(classroomId) {
+  return instructorRequest(`/classrooms/${classroomId}/assignments`);
+}
+
 export async function fetchAdminPatients() {
   //Get the login token from session storage
   const accessToken = sessionStorage.getItem("careflow-access-token");
