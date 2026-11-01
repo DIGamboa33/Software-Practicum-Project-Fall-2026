@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { supabase, getSupabaseAdmin } from "../services/supabase.js";
+import { writeAuditLog } from "../services/auditLog.js";
 
 const studentRouter = Router();
 
@@ -298,7 +299,25 @@ studentRouter.post("/notes", async (request, response) => {
       message: "Unable to create note.",
     });
   }
+  
+  
+  // Derek: Record a successful new note creation.
+  try {
+    await writeAuditLog(supabaseAdmin, {
+      actor_id: user.id,
+      action: "note.created",
+      entity_type: "clinical_note",
+      entity_id: String(data.id),
+      details: {
+        assignment_id: assignmentId,
+        noteType: noteType,
+      },
+    });
+  } catch (error) {
+    console.error("Unable to record note creation:", error);
+  }
 
+  
   return response.status(201).json(data);
 });
 
@@ -444,12 +463,31 @@ studentRouter.patch("/notes/:noteId", async (request, response) => {
       message: "Unable to update note.",
     });
   }
+  
 
   if (!data) {
     return response.status(409).json({
       message: "Note status changed. Refresh and try again.",
     });
   }
+  
+  
+  // Derek: Record a successful note update.
+  try {
+    await writeAuditLog(supabaseAdmin, {
+      actor_id: user.id,
+      action: "note.updated",
+      entity_type: "clinical_note",
+      entity_id: String(data.id),
+      details: {
+        assignment_id: existingNote.assignment_id,
+        noteType: existingNote.note_type,
+      },
+    });
+  } catch (error) {
+    console.error("Unable to record note update:", error);
+  }
+
 
   return response.json(data);
 });
@@ -569,6 +607,25 @@ studentRouter.post("/notes/:noteId/submit", async (request, response) => {
       message: "Note status changed. Refresh and try again.",
     });
   }
+  
+  
+  // Derek: Record a successful note submission.
+  try {
+    await writeAuditLog(supabaseAdmin, {
+      actor_id: user.id,
+      action: "note.submitted",
+      entity_type: "clinical_note",
+      entity_id: String(submitted.id),
+      details: {
+        assignment_id: note.assignment_id,
+        previous_status: note.status,
+        new_status: "Pending Review",
+      },
+    });
+  } catch (error) {
+    console.error("Unable to record note submission:", error);
+  }
+
 
   return response.json({
     message: "Note submitted for instructor review.",
@@ -1115,6 +1172,24 @@ studentRouter.post("/submissions", async (request, response) => {
     return response.status(409).json({
       message: "Submission status changed. Refresh and try again.",
     });
+  }
+
+  //Derek Change audit log for note submission
+  try {
+    await writeAuditLog( admin, {
+      actor_id: user.id,
+      action: "note.submitted",
+      entity_type: "clinical_note",
+      entity_id: String(submitted.id),
+      details: {
+        assignment_id: assignmentId,
+        previous_status: note.status,
+        new_status: "Pending Review",
+      },
+    });
+    console.log("Audit log entry created for note submission.");
+  } catch (error) {
+    console.error("Error writing audit log:", error);
   }
 
   return response.json({

@@ -30,6 +30,7 @@ import PatientOverviewPage from "../pages/PatientOverviewPage";
 import PatientCareTeamPage from "../pages/PatientCareTeamPage";
 import PatientAppointmentsPage from "../pages/PatientAppointmentsPage";
 import PatientHealthInsightsPage from "../pages/PatientHealthInsightsPage";
+import AdminGlobalAuditLogPage from "../pages/AdminGlobalAuditLogPage";
 
 import AdminActivityPage from "../pages/AdminActivityPage";
 
@@ -48,6 +49,7 @@ const routesByRole = {
       patientDetail: { path: "/admin/patient", Component: AdminPatientDetailPage },
       activity: { path: "/admin/activity", Component: AdminActivityPage },
       settings: { path: "/admin/settings", Component: SettingsPage },
+      audit: { path: "/admin/audit-log", Component: AdminGlobalAuditLogPage },
     },
   },
   Instructor: {

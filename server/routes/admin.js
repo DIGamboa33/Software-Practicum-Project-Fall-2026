@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { randomBytes, randomInt } from "node:crypto";
 import { getSupabaseAdmin, supabase } from "../services/supabase.js";
+import { writeAuditLog } from "../services/auditLog.js";
 
 const adminRouter = Router();
 
@@ -67,15 +68,7 @@ function generateTemporaryPassword() {
   return `Cf!${randomBytes(18).toString("base64url")}9a`;
 }
 
-async function writeAuditLog(supabaseAdmin, entry) {
-  const { error } = await supabaseAdmin.from("admin_audit_log").insert(entry);
-  if (error) {
-    console.error("Unable to write admin audit log:", error.message);
-    throw new Error(
-      "Account management is not ready yet. Run the admin audit-log SQL setup first.",
-    );
-  }
-}
+
 
 async function ensureAuditLogReady(supabaseAdmin, response) {
   const { error } = await supabaseAdmin.from("admin_audit_log").select("id").limit(1);
@@ -1128,6 +1121,237 @@ adminRouter.get("/audit-log", async (request, response) => {
     return response.status(500).json({ message: "Unable to load the audit log." });
   }
 });
+
+//Dereks Global Audit Log
+//Page for Admins to view all activity in the system. This is a global audit log that shows all activity in the system, not just admin activity. This is useful for tracking down issues and seeing what users are doing in the system.
+adminRouter.get("/global-audit-log", async (request, response) => {
+  try {
+    // Step 1: Make sure the user is an Admin.
+    const context = await requireAdmin(request, response);
+
+    if (!context) {
+      return;
+    }
+
+    const database = context.supabaseAdmin;
+
+    // Step 2: Get the global audit log from the database.
+    // We will only show 20 events per page
+    const pageSize = 20;
+    const requestedPage = Number(request.query.page);
+    const page = Number.isSafeInteger(requestedPage)
+      ? Math.max(1, Math.min(requestedPage, 1000))
+      : 1;
+
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize - 1;
+
+    
+    // Derek's Global Audit Log search and filters.
+
+    // Read the filters sent from React.
+    const search = String(request.query.search || "").trim();
+    const role = String(request.query.role || "all");
+    const action = String(request.query.action || "all");
+
+    // Only allow recognized roles and actions.
+    const allowedRoles = [
+      "all", "Student", "Instructor", "Admin", "Patient"
+    ];
+
+    const allowedActions = [
+      "all",
+      "note.created",
+      "note.updated",
+      "note.submitted",
+      "note.reviewed",
+      "account.invited",
+      "account.activated",
+      "account.deactivated",
+      "account.access_updated",
+      "account.password_reset_requested",
+      "classroom.created",
+      "student.bulk_invited"
+    ];
+
+    if (
+      search.length > 80 ||
+      !allowedRoles.includes(role) ||
+      !allowedActions.includes(action)
+    ) {
+      return response.status(400).json({
+        message: "Invalid audit log filters."
+      });
+    }
+
+    // Find matching users when a name or role is selected.
+    let matchingActorIds = null;
+
+    if (search || role !== "all") {
+      let profilesQuery = database
+        .from("profiles")
+        .select("id, first_name, last_name");
+
+      // Filter profiles by role.
+      if (role !== "all") {
+        const { data: selectedRole, error: roleError } =
+          await database
+            .from("roles")
+            .select("id")
+            .eq("name", role)
+            .maybeSingle();
+
+        if (roleError) throw roleError;
+
+        if (!selectedRole) {
+          return response.json({
+            logs: [], total: 0, page, pageSize
+          });
+        }
+
+        profilesQuery = profilesQuery.eq("role_id", selectedRole.id);
+      }
+
+      // Split names into search words.
+      // Example: "Bart Simpson" becomes ["bart", "simpson"].
+      const words = search.toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+
+      if (search && words.length === 0) {
+        return response.json({
+          logs: [], total: 0, page, pageSize
+        });
+      }
+
+      // Narrow the database search using the first word.
+      if (words.length > 0) {
+        const firstWord = words[0];
+
+        profilesQuery = profilesQuery.or(
+          `first_name.ilike.%${firstWord}%,last_name.ilike.%${firstWord}%`
+        );
+      }
+
+      const { data: profiles, error: profilesError } =
+        await profilesQuery;
+
+      if (profilesError) throw profilesError;
+
+      // Check the full name against every search word.
+      matchingActorIds = (profiles || [])
+        .filter((profile) => {
+          const fullName =
+            `${profile.first_name || ""} ${profile.last_name || ""}`
+              .toLowerCase();
+
+          return words.every((word) => fullName.includes(word));
+        })
+        .map((profile) => profile.id);
+
+      // No matching users means no matching audit events.
+      if (matchingActorIds.length === 0) {
+        return response.json({
+          logs: [], total: 0, page, pageSize
+        });
+      }
+    }
+
+    // Build the audit query.
+    let auditQuery = database
+      .from("admin_audit_log")
+      .select(
+        "id, actor_id, target_user_id, action, entity_type, entity_id, details, created_at",
+        { count: "exact" }
+      );
+
+    // Filter by the selected action.
+    if (action === "note.updated") {
+      // Include our earlier event naming convention.
+      auditQuery = auditQuery.in("action", [
+        "note.updated", "note.update"
+      ]);
+    } else if (action !== "all") {
+      auditQuery = auditQuery.eq("action", action);
+    }
+
+    // Limit events to matching users.
+    if (matchingActorIds !== null) {
+      auditQuery = auditQuery.in("actor_id", matchingActorIds);
+    }
+
+    // Apply sorting and pagination AFTER filtering.
+    const { data, error, count } = await auditQuery
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(start, end);
+
+    if (error) {
+      throw error;
+    }
+
+    //Display the actual user names in the audit log
+    const auditLogs = data || [];
+
+    const actorIds = [
+      ...new Set(auditLogs.map((entry) => entry.actor_id))
+    ];
+
+    //Find the corresponding profiles
+    let profiles = [];
+
+    if (actorIds.length > 0) {
+      const { data: userProfiles, error: profileError } =
+        await database
+          .from("profiles")
+          .select("id, first_name, last_name, roles(name)")
+          .in("id", actorIds);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    profiles = userProfiles || [];
+    }
+
+    //Match the each profile to its User ID
+    const profileMap = new Map();
+
+    for (const profile of profiles) {
+      profileMap.set(profile.id, profile);
+    }
+
+    //Add the user name and role to the corresponding audit event
+    const logsWithNames = auditLogs.map((entry) => {
+      const profile = profileMap.get(entry.actor_id);
+
+      const fullName = profile
+        ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim()
+        : "";
+
+      return {
+        ...entry,
+        actor_name: fullName || "Unknown user",
+        actor_role: getRelationName(profile?.roles) || "Role unavailable"
+      };
+    });
+
+    // Send the records to the frontend, along with pagination information.
+    return response.json({
+      logs: logsWithNames,
+      total: count || 0,
+      page: page,
+      pageSize: pageSize,
+    });
+  } catch (error) {
+    console.error("Unable to load global audit log:", error);
+
+    return response.status(500).json({
+      message: "Unable to load the global audit log.",
+    });
+  }
+});
+
+
+
 
 
 // ADMIN CLASSROOM AND STUDENT ACTIVITY

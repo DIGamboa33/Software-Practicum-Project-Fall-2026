@@ -3964,6 +3964,34 @@ td small {
   gap: 12px;
   margin-top: 16px;
 }
+
+
+/* Derek's Sidebar Overflow Fix */
+
+/* Keep navigation items inside the sidebar. */
+.sidebar__nav {
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+
+/* Prevent buttons from growing too wide. */
+.sidebar .nav-item {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Keep the icons at their normal size. */
+.sidebar .nav-item .icon {
+  flex-shrink: 0;
+}
+
+/* Allow longer labels to wrap onto a second line. */
+.sidebar .nav-item span {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: break-word;
+  line-height: 1.4;
+}
 .clinical-summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

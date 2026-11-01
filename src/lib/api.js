@@ -132,6 +132,29 @@ export function fetchAdminAuditLog() {
   return adminRequest("/audit-log");
 }
 
+
+// Global Audit Log with search and filters
+export function fetchGlobalAuditLog(page = 1, filters = {}) {
+  const params = new URLSearchParams();
+
+  params.set("page", String(page));
+
+  if (filters.search) {
+    params.set("search", filters.search);
+  }
+
+  if (filters.role && filters.role !== "all") {
+    params.set("role", filters.role);
+  }
+
+  if (filters.action && filters.action !== "all") {
+    params.set("action", filters.action);
+  }
+
+  return adminRequest(`/global-audit-log?${params.toString()}`);
+}
+
+
 export function fetchAdminAcademics() {
   return adminRequest("/academics");
 }

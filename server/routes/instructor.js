@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { getSupabaseAdmin, supabase } from "../services/supabase.js";
+import { writeAuditLog } from "../services/auditLog.js";
 
 const instructorRouter = Router();
 
@@ -967,6 +968,26 @@ instructorRouter.patch(
           .update({ status: "Pending Review" })
           .eq("id", reviewedNote.id);
         throw reviewError;
+      }
+
+      //Dereks audit log for submission review
+      //Record the review action in the audit log
+      try {
+        await writeAuditLog(
+          admin, {
+            actor_id: profile.id,
+            action: "note.reviewed",
+            entity_type: "clinical_note",
+            entity_id: String(reviewedNote.id),
+            details: {
+              assignment_id: assignment.id,
+              decision: decision,
+            }
+          }
+        );
+        console.log("Audit log entry created for note review.");
+      } catch (error) {
+        console.error("Error writing audit log:", error);
       }
 
       return response.json({
