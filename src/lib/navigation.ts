@@ -7,6 +7,7 @@ export const instructorNavigation = [
   { id: "review", label: "Review & co-sign", icon: "patients" },
   { id: "feedback", label: "Feedback & grades", icon: "grid" },
   { id: "oversight", label: "Cohort oversight", icon: "chart" },
+  { id: "patients", label: "Patients", icon: "patients" },
   { id: "closeout", label: "Closeout", icon: "calendar" },
 ];
 

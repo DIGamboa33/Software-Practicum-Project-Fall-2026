@@ -782,5 +782,210 @@ instructorRouter.patch(
     }
   }
 );
+// GET /api/instructor/patients
+// Retrieve existing patients with their demographic records.
+instructorRouter.get("/patients", async (request, response) => {
+  try {
+    const context = await requireInstructor(request, response);
+    if (!context) return;
+
+    const admin = context.supabaseAdmin;
+
+    const { data: patientRecords, error: recordsError } =
+      await admin
+        .from("patient_records")
+        .select(
+          "id, profile_id, date_of_birth, sex, phone, address, created_at"
+        )
+        .order("created_at", { ascending: false });
+
+    if (recordsError) throw recordsError;
+
+    if (!patientRecords?.length) {
+      return response.json({ patients: [] });
+    }
+
+    const profileIds = [
+      ...new Set(
+        patientRecords
+          .map((record) => record.profile_id)
+          .filter(Boolean)
+      ),
+    ];
+
+    const { data: profiles, error: profilesError } =
+      profileIds.length
+        ? await admin
+            .from("profiles")
+            .select(
+              "id, first_name, last_name, careflow_id, roles(name)"
+            )
+            .in("id", profileIds)
+        : { data: [], error: null };
+
+    if (profilesError) throw profilesError;
+
+    const profilesById = new Map(
+      (profiles || [])
+        .filter(
+          (profile) =>
+            relationName(profile.roles) === "Patient"
+        )
+        .map((profile) => [profile.id, profile])
+    );
+
+    const patients = patientRecords
+      .filter((record) =>
+        profilesById.has(record.profile_id)
+      )
+      .map((record) => {
+        const profile = profilesById.get(record.profile_id);
+
+        return {
+          id: record.id,
+          profileId: record.profile_id,
+          name: [
+            profile.first_name,
+            profile.last_name,
+          ]
+            .filter(Boolean)
+            .join(" "),
+          careflowId: profile.careflow_id,
+          dateOfBirth: record.date_of_birth,
+          sex: record.sex,
+          phone: record.phone,
+          address: record.address,
+          createdAt: record.created_at,
+        };
+      });
+
+    return response.json({ patients });
+  } catch (error) {
+    console.error("Unable to load instructor patients:", error);
+
+    return response.status(500).json({
+      message: "Unable to load patients.",
+    });
+  }
+});
+
+instructorRouter.get("/patients/:patientId", async (request, response) => {
+  try {
+    const context = await requireInstructor(request, response);
+    if (!context) return;
+
+    const admin = context.supabaseAdmin;
+    const patientRecordId = request.params.patientId;
+
+    const { data: patientRecord, error: recordError } = await admin
+      .from("patient_records")
+      .select("*")
+      .eq("id", patientRecordId)
+      .maybeSingle();
+
+    if (recordError) throw recordError;
+
+    if (!patientRecord) {
+      return response.status(404).json({
+        message: "Patient not found.",
+      });
+    }
+
+    const profileId = patientRecord.profile_id;
+
+    if (!profileId) {
+      return response.status(404).json({
+        message: "Patient profile not found.",
+      });
+    }
+
+    const { data: profile, error: profileError } = await admin
+      .from("profiles")
+      .select("id, first_name, last_name, careflow_id, roles(name)")
+      .eq("id", profileId)
+      .maybeSingle();
+
+    if (profileError) throw profileError;
+
+    if (!profile || relationName(profile.roles) !== "Patient") {
+      return response.status(404).json({
+        message: "Patient profile not found.",
+      });
+    }
+
+    const portal = admin.schema("patient_portal");
+
+    const [
+      medicationsResult,
+      allergiesResult,
+      historyResult,
+      appointmentsResult,
+      vitalsResult,
+    ] = await Promise.all([
+      portal
+        .from("medications")
+        .select("*")
+        .eq("patient_id", profileId),
+
+      portal
+        .from("allergies")
+        .select("*")
+        .eq("profile_id", profileId),
+
+      portal
+        .from("medical_history")
+        .select("*")
+        .eq("profile_id", profileId),
+
+      portal
+        .from("appointments")
+        .select("*")
+        .eq("patient_id", profileId),
+
+      portal
+        .from("vitals")
+        .select("*")
+        .eq("patient_id", profileId),
+    ]);
+
+    const queryError =
+      medicationsResult.error ||
+      allergiesResult.error ||
+      historyResult.error ||
+      appointmentsResult.error ||
+      vitalsResult.error;
+
+    if (queryError) throw queryError;
+
+    return response.json({
+      patient: {
+        id: patientRecord.id,
+        profileId,
+        name: [
+          profile.first_name,
+          profile.last_name,
+        ].filter(Boolean).join(" "),
+        careflowId: profile.careflow_id,
+        dateOfBirth: patientRecord.date_of_birth,
+        sex: patientRecord.sex,
+        phone: patientRecord.phone,
+        address: patientRecord.address,
+
+        medications: medicationsResult.data || [],
+        allergies: allergiesResult.data || [],
+        medicalHistory: historyResult.data || [],
+        appointments: appointmentsResult.data || [],
+        vitals: vitalsResult.data || [],
+      },
+    });
+  } catch (error) {
+    console.error("Unable to load patient details:", error);
+
+    return response.status(500).json({
+      message: "Unable to load patient clinical records.",
+    });
+  }
+});
+
 
 export default instructorRouter;
