@@ -1,0 +1,143 @@
+.audit-event-details {
+  font-size: 12px;
+  color: #53627f;
+}
+
+.audit-event-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #52679b;
+}
+
+.audit-event-details summary:hover {
+  color: #263c75;
+}
+
+.audit-event-description {
+  margin: 12px 0;
+  line-height: 1.6;
+  color: #35415e;
+}
+
+.audit-event-fields {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  background: #f6f8fc;
+  border-radius: 8px;
+}
+
+.audit-event-fields > div {
+  display: grid;
+  gap: 4px;
+}
+
+.audit-event-fields dt {
+  font-size: 11px;
+  font-weight: 700;
+  color: #75829a;
+}
+
+.audit-event-fields dd {
+  margin: 0;
+  font-size: 12px;
+  color: #35415e;
+  overflow-wrap: anywhere;
+}
+
+/* Display the name and role of the user who performed an action. */
+
+.audit-actor {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.audit-actor-name {
+  color: #35415e;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.audit-actor-role {
+  color: #8793a5;
+  font-size: 11px;
+}
+
+
+/* Derek's Global Audit Log Filters */
+
+.global-audit-filters {
+  display: grid;
+  grid-template-columns:
+    minmax(180px, 1.4fr)
+    minmax(130px, 0.8fr)
+    minmax(180px, 1.2fr)
+    auto;
+  align-items: end;
+  gap: 14px;
+  margin: 24px 0;
+}
+
+.global-audit-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  color: #65728a;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.global-audit-filters input,
+.global-audit-filters select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 10px 12px;
+  border: 1px solid #d9dfeb;
+  border-radius: 8px;
+  background: white;
+  color: #35415e;
+  font: inherit;
+  font-size: 12px;
+}
+
+.global-audit-filter-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.global-audit-filter-buttons button {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.global-audit-clear-button {
+  padding: 10px 14px;
+  border: 1px solid #d9dfeb;
+  border-radius: 8px;
+  background: white;
+  color: #53627f;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.global-audit-clear-button:hover {
+  background: #f3f6fb;
+}
+
+/* Stack the filters on smaller screens. */
+@media (max-width: 1100px) {
+  .global-audit-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .global-audit-filters {
+    grid-template-columns: 1fr;
+  }
+}

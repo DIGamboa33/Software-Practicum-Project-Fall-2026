@@ -4,12 +4,16 @@ import {
   createInstructorClassroomGroup,
   fetchInstructorClassroom,
   fetchInstructorClassrooms,
+  enrollInstructorStudents,
 } from "../lib/api";
 
 function InstructorClassesPage({ user }) {
   const [classrooms, setClassrooms] = useState([]);
   const [classroomId, setClassroomId] = useState("");
   const [classroomDetail, setClassroomDetail] = useState(null);
+  // Instructor student enrollment form.
+  const [isEnrollOpen, setIsEnrollOpen] = useState(false);
+  const [selectedEnrollIds, setSelectedEnrollIds] = useState([]);
   const [isGroupOpen, setIsGroupOpen] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [selectedGroupStudentIds, setSelectedGroupStudentIds] = useState([]);
@@ -57,6 +61,58 @@ function InstructorClassesPage({ user }) {
     loadDetail();
     return () => { isCurrent = false; };
   }, [classroomId]);
+
+
+  // Reset selections when changing classrooms.
+  useEffect(() => {
+    setIsEnrollOpen(false);
+    setSelectedEnrollIds([]);
+  }, [classroomId]);
+
+  // Select or deselect an eligible student.
+  function toggleEnrollment(studentId) {
+    setSelectedEnrollIds((current) =>
+      current.includes(studentId)
+        ? current.filter((id) => id !== studentId)
+        : [...current, studentId]
+    );
+  }
+
+  // Register the selected students in the classroom.
+  async function handleEnrollStudents(event) {
+    event.preventDefault();
+
+    if (!classroomId || !selectedEnrollIds.length) return;
+
+    setError("");
+    setNotice("");
+    setIsSaving(true);
+
+    try {
+      const result = await enrollInstructorStudents(
+        classroomId,
+        selectedEnrollIds
+      );
+
+      // Refresh the roster after enrollment.
+      const refreshed = await fetchInstructorClassroom(classroomId);
+
+      setClassroomDetail(refreshed);
+      setSelectedEnrollIds([]);
+      setIsEnrollOpen(false);
+      setNotice(result.message);
+
+    } catch (enrollmentError) {
+      setError(
+        enrollmentError instanceof Error
+          ? enrollmentError.message
+          : "Unable to enroll students."
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
 
   function toggleGroupStudent(studentId) {
     setSelectedGroupStudentIds((current) =>
@@ -186,6 +242,7 @@ function InstructorClassesPage({ user }) {
                 <div><p className="section-label">Roster · {classroom.discipline}</p><h2>Enrolled learners</h2></div>
                 <div className="panel__header-actions">
                   <span className="preview-label">{classroomDetail.students.length} active</span>
+                  <button className="secondary-buttom" disabled={!classroomDetail.availableStudents.length} onClick={() => setIsEnrollOpen(true)} type="button">Enroll learner</button>
                   <button className="secondary-button" disabled={!classroomDetail.students.length} onClick={() => setIsGroupOpen(true)} type="button">Create group</button>
                 </div>
               </div>
@@ -214,6 +271,74 @@ function InstructorClassesPage({ user }) {
               <button className="secondary-button" disabled type="button">Scenario tools coming next</button>
             </article>
           </section>
+
+
+          {/* Derek: Instructor student enrollment form. */}
+          {isEnrollOpen && (
+            <section className="panel create-class-panel group-creation-panel">
+              <div className="panel__header">
+                <div>
+                  <p className="section-label">Student enrollment</p>
+                  <h2>Enroll eligible learners</h2>
+                </div>
+
+                <button
+                  className="row-action"
+                  aria-label="Close enrollment form"
+                  onClick={() => setIsEnrollOpen(false)}
+                  type="button"
+                >
+                  ×
+                </button>
+              </div>
+
+              <form
+                className="create-class-form"
+                onSubmit={handleEnrollStudents}
+              >
+                <div>
+                  <p className="create-class-form__hint">
+                    Select students whose primary discipline is accepted by
+                    this classroom.
+                  </p>
+
+                  <div className="eligible-learner-list">
+                    {classroomDetail.availableStudents.map((student) => (
+                      <label key={student.id}>
+                        <input
+                          type="checkbox"
+                          checked={selectedEnrollIds.includes(student.id)}
+                          onChange={() => toggleEnrollment(student.id)}
+                        />
+
+                        <span>{student.name}</span>
+                        <small>{student.subrole}</small>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="admin-form__actions">
+                  <button
+                    className="secondary-button"
+                    onClick={() => setIsEnrollOpen(false)}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    className="primary-button"
+                    disabled={isSaving || !selectedEnrollIds.length}
+                    type="submit"
+                  >
+                    {isSaving ? "Enrolling..." : "Enroll selected"}
+                  </button>
+                </div>
+              </form>
+            </section>
+          )}
+
 
           <section className="panel group-overview-panel">
             <div className="panel__header">
