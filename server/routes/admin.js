@@ -1149,8 +1149,11 @@ adminRouter.get("/global-audit-log", async (request, response) => {
     const database = context.supabaseAdmin;
 
     // Step 2: Get the global audit log from the database.
-    // We will only show 20 events per page
-    const pageSize = 20;
+    // Allow a small set of safe page sizes for the Admin table.
+    const requestedPageSize = Number(request.query.pageSize);
+    const pageSize = [5, 10, 20, 50].includes(requestedPageSize)
+      ? requestedPageSize
+      : 20;
     const requestedPage = Number(request.query.page);
     const page = Number.isSafeInteger(requestedPage)
       ? Math.max(1, Math.min(requestedPage, 1000))

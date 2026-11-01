@@ -7,6 +7,7 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
+import Icon from "../../components/Icon";
 import { fetchAdminUsers } from "../../lib/api";
 
 const ADMIN_CHART_COLORS = ["#6277d8", "#45bca2", "#f0a650", "#a175d8"];
@@ -120,36 +121,42 @@ function AdminOperationsDashboard({ user }) {
       label: "Total accounts",
       value: stats?.totalUsers || 0,
       description: "All Careflow user accounts",
+      icon: "grid",
     },
 
     {
       label: "Patients",
       value: patients,
       description: "Registered patient accounts",
+      icon: "patients",
     },
 
     {
       label: "Instructors",
       value: instructors,
       description: "Instructor accounts",
+      icon: "chart",
     },
 
     {
       label: "Students",
       value: students,
       description: "Student accounts",
+      icon: "calendar",
     },
 
     {
       label: "New this week",
       value: stats?.newThisWeek || 0,
       description: "Accounts created during the last 7 days",
+      icon: "plus",
     },
 
     {
       label: "Instructor cases",
       value: "—",
       description: "Scenario database not connected yet",
+      icon: "grid",
     },
   ];
 
@@ -186,9 +193,14 @@ function AdminOperationsDashboard({ user }) {
             className="panel role-dashboard__area"
             key={card.label}
           >
-            <p className="section-label">
-              {card.label}
-            </p>
+            <div className="role-dashboard__card-heading">
+              <p className="section-label">
+                {card.label}
+              </p>
+              <span className={`role-dashboard__card-icon role-dashboard__card-icon--${card.icon}`}>
+                <Icon name={card.icon} size={17} />
+              </span>
+            </div>
 
             <h2
               style={{

@@ -176,7 +176,8 @@ function AdminGlobalAuditLogPage() {
     let isCurrent = true;
 
     fetchGlobalAuditLog(page, {
-      search: searchTerm,
+        pageSize,
+        search: searchTerm,
       role: selectedRole,
       action: selectedAction
     })
@@ -198,7 +199,7 @@ function AdminGlobalAuditLogPage() {
     return () => {
       isCurrent = false;
     };
-  }, [page, searchTerm, selectedRole, selectedAction]);
+  }, [page, pageSize, searchTerm, selectedRole, selectedAction]);
 
   // Move to another page of audit events.
   function handlePageChange(nextPage) {
@@ -397,7 +398,7 @@ function AdminGlobalAuditLogPage() {
 
         {!loading && !error && logs.length > 0 && (
           <>
-            <div className="table-wrap">
+            <div className="table-wrap admin-scroll-table">
               <table>
                 <thead>
                   <tr>
@@ -496,6 +497,11 @@ function AdminGlobalAuditLogPage() {
               pageSize={pageSize}
               itemLabel={total === 1 ? "audit event" : "audit events"}
               onPageChange={handlePageChange}
+              onPageSizeChange={(nextPageSize) => {
+                setLoading(true);
+                setPageSize(nextPageSize);
+                setPage(1);
+              }}
             />
           </>
         )}

@@ -37,6 +37,7 @@ function AdminUserDirectoryPage() {
   const [error, setError] = useState("");
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [userPage, setUserPage] = useState(1);
+  const [usersPerPage, setUsersPerPage] = useState(10);
   const [accessOptions, setAccessOptions] = useState({ roles: [], subroles: [] });
   const [auditEntries, setAuditEntries] = useState([]);
   const [managementError, setManagementError] = useState("");
@@ -131,7 +132,6 @@ function AdminUserDirectoryPage() {
     setUserPage(1);
   }
 
-  const usersPerPage = 10;
   const visibleUsers = directory.users.slice(
     (userPage - 1) * usersPerPage,
     userPage * usersPerPage,
@@ -390,6 +390,10 @@ function AdminUserDirectoryPage() {
                 currentPage={userPage}
                 itemLabel="accounts"
                 onPageChange={setUserPage}
+                onPageSizeChange={(nextPageSize) => {
+                  setUsersPerPage(nextPageSize);
+                  setUserPage(1);
+                }}
                 pageSize={usersPerPage}
                 totalItems={directory.users.length}
               />

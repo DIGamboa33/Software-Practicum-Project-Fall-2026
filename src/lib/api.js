@@ -139,6 +139,10 @@ export function fetchGlobalAuditLog(page = 1, filters = {}) {
 
   params.set("page", String(page));
 
+  if (filters.pageSize) {
+    params.set("pageSize", String(filters.pageSize));
+  }
+
   if (filters.search) {
     params.set("search", filters.search);
   }

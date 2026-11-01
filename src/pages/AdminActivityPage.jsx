@@ -13,6 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import Pagination from "../components/Pagination";
 import { fetchAdminActivity } from "../lib/api";
 import "./AdminActivityPage.css";
 
@@ -45,6 +46,12 @@ function AdminActivityPage() {
   const [searchText, setSearchText] = useState("");
 
   const [activityFilter, setActivityFilter] = useState("all");
+  const [classroomPage, setClassroomPage] = useState(1);
+  const [classroomPageSize, setClassroomPageSize] = useState(10);
+  const [rosterPage, setRosterPage] = useState(1);
+  const [rosterPageSize, setRosterPageSize] = useState(10);
+  const [activityPage, setActivityPage] = useState(1);
+  const [activityPageSize, setActivityPageSize] = useState(10);
 
   // The student currently selected by the Admin.
   const [selectedStudentId, setSelectedStudentId] = useState(null);
@@ -208,6 +215,19 @@ function AdminActivityPage() {
     return Object.entries(totals).map(([name, value]) => ({ name, value }));
   }, [visibleActivity]);
 
+  const paginatedClassrooms = visibleClassrooms.slice(
+    (classroomPage - 1) * classroomPageSize,
+    classroomPage * classroomPageSize,
+  );
+  const paginatedStudentRoster = studentRoster.slice(
+    (rosterPage - 1) * rosterPageSize,
+    rosterPage * rosterPageSize,
+  );
+  const paginatedActivity = visibleActivity.slice(
+    (activityPage - 1) * activityPageSize,
+    activityPage * activityPageSize,
+  );
+
   // Find the student selected by the Admin.
   const selectedStudent = studentRoster.find(
     (student) => student.id === selectedStudentId
@@ -228,6 +248,9 @@ function AdminActivityPage() {
   // Update the selected classroom.
   function changeClassroom(event) {
     setSelectedClassroom(event.target.value);
+    setClassroomPage(1);
+    setRosterPage(1);
+    setActivityPage(1);
 
     // Close student details when changing classrooms.
     setSelectedStudentId(null);
@@ -310,6 +333,8 @@ function AdminActivityPage() {
                 onChange={(event) => {
                   setSearchText(event.target.value);
                   setSelectedStudentId(null);
+                  setRosterPage(1);
+                  setActivityPage(1);
                 }}
               />
             </label>
@@ -319,7 +344,10 @@ function AdminActivityPage() {
 
               <select
                 value={activityFilter}
-                onChange={(event) => setActivityFilter(event.target.value)}
+                onChange={(event) => {
+                  setActivityFilter(event.target.value);
+                  setActivityPage(1);
+                }}
               >
                 <option value="all">All Cases</option>
                 <option value="attention">Needs Attention</option>
@@ -384,7 +412,8 @@ function AdminActivityPage() {
             {visibleClassrooms.length === 0 ? (
               <p>No classrooms found.</p>
             ) : (
-              <div className="table-wrap">
+              <>
+                <div className="table-wrap admin-scroll-table">
                 <table>
                   <thead>
                     <tr>
@@ -399,7 +428,7 @@ function AdminActivityPage() {
                   </thead>
 
                   <tbody>
-                    {visibleClassrooms.map((classroom) => (
+                    {paginatedClassrooms.map((classroom) => (
                       <tr key={classroom.id}>
                         <td>
                           <strong>{classroom.full_name}</strong>
@@ -432,7 +461,19 @@ function AdminActivityPage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+                </div>
+                <Pagination
+                currentPage={classroomPage}
+                itemLabel="classrooms"
+                onPageChange={setClassroomPage}
+                onPageSizeChange={(nextPageSize) => {
+                  setClassroomPageSize(nextPageSize);
+                  setClassroomPage(1);
+                }}
+                pageSize={classroomPageSize}
+                totalItems={visibleClassrooms.length}
+                />
+              </>
             )}
           </section>
 
@@ -457,7 +498,8 @@ function AdminActivityPage() {
               {studentRoster.length === 0 ? (
                 <p>No enrolled students found.</p>
               ) : (
-                <div className="table-wrap">
+                <>
+                  <div className="table-wrap admin-scroll-table">
                   <table>
                     <thead>
                       <tr>
@@ -469,7 +511,7 @@ function AdminActivityPage() {
                     </thead>
 
                     <tbody>
-                      {studentRoster.map((student) => (
+                      {paginatedStudentRoster.map((student) => (
                         <tr
                           key={`${student.classroomId}-${student.id}`}
                         >
@@ -503,7 +545,19 @@ function AdminActivityPage() {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                  </div>
+                  <Pagination
+                  currentPage={rosterPage}
+                  itemLabel="enrollments"
+                  onPageChange={setRosterPage}
+                  onPageSizeChange={(nextPageSize) => {
+                    setRosterPageSize(nextPageSize);
+                    setRosterPage(1);
+                  }}
+                  pageSize={rosterPageSize}
+                  totalItems={studentRoster.length}
+                  />
+                </>
               )}
             </section>
 
@@ -643,7 +697,8 @@ function AdminActivityPage() {
             {visibleActivity.length === 0 ? (
               <p>No student case activity found.</p>
             ) : (
-              <div className="table-wrap">
+              <>
+                <div className="table-wrap admin-scroll-table">
                 <table>
                   <thead>
                     <tr>
@@ -657,7 +712,7 @@ function AdminActivityPage() {
                   </thead>
 
                   <tbody>
-                    {visibleActivity.map((item) => (
+                    {paginatedActivity.map((item) => (
                       <tr key={item.id}>
                         <td>
                           <strong>{item.studentName}</strong>
@@ -684,7 +739,19 @@ function AdminActivityPage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+                </div>
+                <Pagination
+                currentPage={activityPage}
+                itemLabel="case activities"
+                onPageChange={setActivityPage}
+                onPageSizeChange={(nextPageSize) => {
+                  setActivityPageSize(nextPageSize);
+                  setActivityPage(1);
+                }}
+                pageSize={activityPageSize}
+                totalItems={visibleActivity.length}
+                />
+              </>
             )}
           </section>
 

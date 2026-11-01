@@ -21,6 +21,7 @@ function AdminPatientsPage() {
   // Stores what the Admin types into the search box.
   const [searchText, setSearchText] = useState("");
   const [patientPage, setPatientPage] = useState(1);
+  const [patientsPerPage, setPatientsPerPage] = useState(10);
 
   // Helps us show a loading message while waiting for Supabase.
   const [isLoading, setIsLoading] = useState(true);
@@ -97,7 +98,6 @@ function AdminPatientsPage() {
       { name: "Inactive", value: patients.length - activePatients },
     ].filter((item) => item.value > 0);
   }, [patients]);
-  const patientsPerPage = 10;
   const visiblePatients = filteredPatients.slice(
     (patientPage - 1) * patientsPerPage,
     patientPage * patientsPerPage,
@@ -254,11 +254,15 @@ function AdminPatientsPage() {
               </tbody>
               </table>
             </div>
-            <Pagination
-              currentPage={patientPage}
-              itemLabel="patients"
-              onPageChange={setPatientPage}
-              pageSize={patientsPerPage}
+              <Pagination
+                currentPage={patientPage}
+                itemLabel="patients"
+                onPageChange={setPatientPage}
+                onPageSizeChange={(nextPageSize) => {
+                  setPatientsPerPage(nextPageSize);
+                  setPatientPage(1);
+                }}
+                pageSize={patientsPerPage}
               totalItems={filteredPatients.length}
             />
           </>
