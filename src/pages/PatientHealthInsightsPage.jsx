@@ -8,12 +8,7 @@ function PatientHealthInsightsPage() {
   const [activeTab, setActiveTab] = useState("updates");
   const [updateFilter, setUpdateFilter] = useState("All");
 
-  // Modal state for scheduling from a referral
-  const [selectedReferral, setSelectedReferral] = useState(null);
-  const [reason, setReason] = useState("");
-  const [appointmentDate, setAppointmentDate] = useState("");
-  const [location, setLocation] = useState("Specialty Clinic Room B");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+ 
 
   async function loadData() {
     try {

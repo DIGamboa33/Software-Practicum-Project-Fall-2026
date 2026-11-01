@@ -9,11 +9,7 @@ function PatientAppointmentsPage() {
   const [activeTab, setActiveTab] = useState("upcoming");
   const [showModal, setShowModal] = useState(false);
 
-  // Form state
-  const [reason, setReason] = useState("");
-  const [appointmentDate, setAppointmentDate] = useState("");
-  const [location, setLocation] = useState("Main Clinic Room A");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
 
   async function loadData() {
     try {
