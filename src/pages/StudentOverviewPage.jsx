@@ -1,6 +1,8 @@
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import Icon from "../components/Icon";
+import Pagination from "../components/Pagination";
 import { fetchStudentCases } from "../lib/api";
 
 function StudentOverviewPage({ user, onNavigate }) {
@@ -8,8 +10,20 @@ function StudentOverviewPage({ user, onNavigate }) {
   const [casesLoading, setCasesLoading] = useState(true);
   const [casesError, setCasesError] = useState("");
   const [hoveredCaseId, setHoveredCaseId] = useState(null);
+  const [casePage, setCasePage] = useState(1);
+  const [casesPerPage, setCasesPerPage] = useState(10);
 
   const firstName = user?.name?.split(" ")[0] || "Student";
+  const caseStatusData = useMemo(() => {
+    const totals = cases.reduce((counts, patientCase) => {
+      const status = patientCase.encounter_status || "Not started";
+      counts[status] = (counts[status] || 0) + 1;
+      return counts;
+    }, {});
+    return Object.entries(totals).map(([name, value]) => ({ name, value }));
+  }, [cases]);
+  const activeCases = cases.filter((patientCase) => !["Checked out", "Completed"].includes(patientCase.encounter_status)).length;
+  const visibleCases = cases.slice((casePage - 1) * casesPerPage, casePage * casesPerPage);
 
   useEffect(() => {
     let isCurrent = true;
@@ -81,6 +95,16 @@ function StudentOverviewPage({ user, onNavigate }) {
       </section>
 
       <section className="panel data-panel">
+        <div className="student-dashboard-summary">
+          <article className="student-summary-card"><span className="student-summary-card__icon"><Icon name="patients" size={18} /></span><div><span>Assigned cases</span><strong>{cases.length}</strong><small>Available learning scenarios</small></div></article>
+          <article className="student-summary-card"><span className="student-summary-card__icon student-summary-card__icon--mint"><Icon name="chart" size={18} /></span><div><span>In progress</span><strong>{activeCases}</strong><small>Encounters still underway</small></div></article>
+          <article className="student-summary-chart">
+            <div><p className="section-label">Case progress</p><h2>Status mix</h2></div>
+            {caseStatusData.length ? <div className="student-summary-chart__canvas"><ResponsiveContainer height="100%" width="100%"><PieChart><Pie data={caseStatusData} dataKey="value" innerRadius={34} nameKey="name" outerRadius={53} paddingAngle={3}>{caseStatusData.map((item, index) => <Cell fill={["#6277d8", "#45bca2", "#f0a650", "#a175d8"][index % 4]} key={item.name} />)}</Pie><Tooltip formatter={(value) => [`${value} cases`, "Count"]} /><Legend /></PieChart></ResponsiveContainer></div> : <p className="directory-loading">No case data yet.</p>}
+          </article>
+        </div>
+
+        <div className="student-case-table-heading"><div><p className="section-label">Learning workspace</p><h2>Assigned patient cases</h2></div><span>{cases.length} total</span></div>
         {cases.length === 0 ? (
           <p
             style={{
@@ -92,7 +116,7 @@ function StudentOverviewPage({ user, onNavigate }) {
           </p>
         ) : (
           <div
-            className="table-wrap"
+            className="table-wrap admin-scroll-table"
             style={{
               width: "100%",
               maxWidth: "100%",
@@ -132,7 +156,7 @@ function StudentOverviewPage({ user, onNavigate }) {
               </thead>
 
               <tbody>
-                {cases.map((patientCase) => {
+                {visibleCases.map((patientCase) => {
                   const isHovered =
                     hoveredCaseId === patientCase.id;
 
@@ -287,7 +311,7 @@ function StudentOverviewPage({ user, onNavigate }) {
                               "background-color 0.15s ease, color 0.15s ease",
                           }}
                         >
-                          <Icon name="arrow" size={16} />
+                          Details
                         </button>
                       </td>
                     </tr>
@@ -297,6 +321,7 @@ function StudentOverviewPage({ user, onNavigate }) {
             </table>
           </div>
         )}
+        {cases.length > 0 && <Pagination currentPage={casePage} itemLabel="assigned cases" onPageChange={setCasePage} onPageSizeChange={(size) => { setCasesPerPage(size); setCasePage(1); }} pageSize={casesPerPage} totalItems={cases.length} />}
       </section>
     </div>
   );

@@ -3,10 +3,10 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import Icon from "../components/Icon";
 import { fetchStudentClass } from "../lib/api";
 
-function Fact({ label, value }) {
+function Fact({ icon, label, value }) {
   return (
     <div className="class-fact">
-      <span className="class-fact__label">{label}</span>
+      <span className="class-fact__label"><Icon name={icon} size={14} /> {label}</span>
       <strong className="class-fact__value">{value}</strong>
     </div>
   );
@@ -83,15 +83,15 @@ function StudentClassDetailPage() {
       {status === "ready" && classroom && (
         <div className="class-detail">
             <section className="class-detail__facts">
-            <Fact label="Discipline" value={classroom.discipline || "Not set"} />
-            <Fact label="CRN" value={classroom.crn} />
-            <Fact label="Room" value={classroom.room || "Not set"} />
-            <Fact label="Term" value={classroom.term} />
+            <Fact icon="grid" label="Discipline" value={classroom.discipline || "Not set"} />
+            <Fact icon="chart" label="CRN" value={classroom.crn} />
+            <Fact icon="patients" label="Room" value={classroom.room || "Not set"} />
+            <Fact icon="calendar" label="Term" value={classroom.term} />
             </section>
 
             <section className="class-detail__columns">
             <article className="panel class-detail__card">
-                <p className="section-label">Instructor</p>
+                <p className="section-label"><Icon name="patients" size={14} /> Instructor</p>
                 {classroom.instructors.length ? (
                 <ul className="class-chips">
                     {classroom.instructors.map((name) => (
@@ -110,7 +110,7 @@ function StudentClassDetailPage() {
             </article>
 
             <article className="panel class-detail__card">
-                <p className="section-label">Your group</p>
+                <p className="section-label"><Icon name="grid" size={14} /> Your group</p>
                 <h2>{classroom.group ? classroom.group.name : "No group yet"}</h2>
                 {classroom.group &&
                 (classroom.group.teammates.length ? (
@@ -126,7 +126,7 @@ function StudentClassDetailPage() {
             </section>
 
             <section className="panel class-detail__card">
-            <p className="section-label">Cases</p>
+            <p className="section-label"><Icon name="chart" size={14} /> Cases</p>
             <h2>Cases for this class</h2>
             <p className="class-detail__note">
                 Cases assigned in this class will appear here once they are linked to
