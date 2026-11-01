@@ -143,6 +143,20 @@ export function createAdminClassroom(classroom) {
   });
 }
 
+// Update accepted disciplines for an existing classroom.
+export function updateAdminClassroomDisciplines(
+  classroomId,
+  additionalSubroleIds
+) {
+  return adminRequest(
+    `/academics/classrooms/${classroomId}/allowed-disciplines`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ additionalSubroleIds })
+    }
+  );
+}
+
 export function assignAdminClassroomInstructor(classroomId, instructorId) {
   return adminRequest(`/academics/classrooms/${classroomId}/instructors`, {
     method: "POST",
@@ -181,6 +195,17 @@ export function fetchInstructorClassroom(classroomId) {
 
 export function fetchEligibleInstructorStudents() {
   return instructorRequest("/eligible-students");
+}
+
+// Register eligible students in an existing classroom.
+export function enrollInstructorStudents(classroomId, studentIds) {
+  return instructorRequest(
+    `/classrooms/${classroomId}/enrollments`,
+    {
+      method: "POST",
+      body: JSON.stringify({ studentIds })
+    }
+  );
 }
 
 export function createInstructorClassroomGroup(classroomId, group) {
@@ -491,7 +516,7 @@ export async function updateStudentCaseStatus(
   if (!response.ok) {
     throw new Error(
       payload.message ||
-        "Unable to update encounter status.",
+      "Unable to update encounter status.",
     );
   }
 
@@ -619,19 +644,19 @@ export async function fetchPatientDashboard() {
   }
 
   const response = await fetch("/api/patient/dashboard", {
-    headers: {Authorization: `Bearer ${accessToken}`},
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
 
   const payload = await response.json();
-  
-  
 
-  if(!response.ok){
+
+
+  if (!response.ok) {
     throw new Error(payload.message || "Unable to load your patient health dashboard");
 
   }
   return payload;
-  
+
 }
 
 export async function fetchPatientCareTeam() {
