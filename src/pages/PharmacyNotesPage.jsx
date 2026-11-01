@@ -36,7 +36,7 @@ const CPT = ["99211", "99212", "99213", "99214", "99215"].map(
 
 const TEMPLATES = {
   pharmacy_soap: {
-    label: "SOAP (Ambulatory Care)",
+    label: "SOAP",
     sections: [
       ["Subjective", [
         ["hpi", "History of Present Illness / OLDCARTS"],
@@ -63,7 +63,7 @@ const TEMPLATES = {
     ],
   },
   pharmacy_sbar: {
-    label: "SBAR (Inpatient)",
+    label: "SBAR",
     sections: [
       ["Situation", [
         ["situation", "Current Situation / Reason for Communication"],
