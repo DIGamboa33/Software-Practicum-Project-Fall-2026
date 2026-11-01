@@ -1,4 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import Icon from "../components/Icon";
 import Pagination from "../components/Pagination";
 import {
@@ -113,8 +122,6 @@ function AdminAcademicsPage() {
       [classroom.discipline]: (totals[classroom.discipline] || 0) + 1,
     }), {}),
   ).map(([discipline, count]) => ({ discipline, count })), [academics.classrooms]);
-  const largestTermEnrollment = Math.max(...enrollmentByTerm.map((item) => item.count), 1);
-  const largestDisciplineCount = Math.max(...classroomsByDiscipline.map((item) => item.count), 1);
 
   function updateClassroom(field, value) {
     setClassroomForm((current) => ({
@@ -317,11 +324,11 @@ function AdminAcademicsPage() {
       <section className="admin-academic-insights">
         <article className="panel admin-mini-chart">
           <div className="panel__header"><div><p className="section-label">Enrollment trend</p><h2>Students by semester</h2></div><Icon name="chart" size={19} /></div>
-          {enrollmentByTerm.length ? <div className="admin-bar-chart">{enrollmentByTerm.map((item) => <div key={item.term}><span>{item.term}</span><i><b style={{ width: `${(item.count / largestTermEnrollment) * 100}%` }} /></i><strong>{item.count}</strong></div>)}</div> : <p className="directory-loading">Create a classroom to begin tracking enrollment.</p>}
+          {enrollmentByTerm.length ? <div className="admin-visual-canvas admin-visual-canvas--academic"><ResponsiveContainer height="100%" width="100%"><BarChart data={enrollmentByTerm} margin={{ left: -20, right: 8, top: 10 }}><CartesianGrid stroke="#edf0f5" strokeDasharray="3 3" vertical={false} /><XAxis dataKey="term" tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} tick={{ fontSize: 11 }} /><Tooltip formatter={(value) => [`${value} students`, "Enrollment"]} /><Bar dataKey="count" fill="#6277d8" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div> : <p className="directory-loading">Create a classroom to begin tracking enrollment.</p>}
         </article>
         <article className="panel admin-mini-chart">
           <div className="panel__header"><div><p className="section-label">Program coverage</p><h2>Classes by discipline</h2></div><Icon name="grid" size={19} /></div>
-          {classroomsByDiscipline.length ? <div className="admin-bar-chart admin-bar-chart--mint">{classroomsByDiscipline.map((item) => <div key={item.discipline}><span>{item.discipline}</span><i><b style={{ width: `${(item.count / largestDisciplineCount) * 100}%` }} /></i><strong>{item.count}</strong></div>)}</div> : <p className="directory-loading">Discipline coverage will appear when classrooms are added.</p>}
+          {classroomsByDiscipline.length ? <div className="admin-visual-canvas admin-visual-canvas--academic"><ResponsiveContainer height="100%" width="100%"><BarChart data={classroomsByDiscipline} layout="vertical" margin={{ left: -10, right: 8, top: 6 }}><CartesianGrid horizontal={false} stroke="#edf0f5" strokeDasharray="3 3" /><XAxis allowDecimals={false} type="number" tick={{ fontSize: 11 }} /><YAxis dataKey="discipline" tick={{ fontSize: 11 }} type="category" width={82} /><Tooltip formatter={(value) => [`${value} classes`, "Classrooms"]} /><Bar dataKey="count" fill="#45bca2" radius={[0, 6, 6, 0]} /></BarChart></ResponsiveContainer></div> : <p className="directory-loading">Discipline coverage will appear when classrooms are added.</p>}
         </article>
       </section>
 

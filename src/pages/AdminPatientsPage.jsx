@@ -1,5 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+} from "recharts";
 import Icon from "../components/Icon";
 import Pagination from "../components/Pagination";
 import { fetchAdminPatients } from "../lib/api";
@@ -81,6 +89,14 @@ function AdminPatientsPage() {
   }
 
   const filteredPatients = getFilteredPatients();
+  const patientStatusData = useMemo(() => {
+    const activePatients = patients.filter((patient) => patient.isActive !== false).length;
+
+    return [
+      { name: "Active", value: activePatients },
+      { name: "Inactive", value: patients.length - activePatients },
+    ].filter((item) => item.value > 0);
+  }, [patients]);
   const patientsPerPage = 10;
   const visiblePatients = filteredPatients.slice(
     (patientPage - 1) * patientsPerPage,
@@ -248,6 +264,41 @@ function AdminPatientsPage() {
           </>
         )}
       </section>
+
+      {!isLoading && !error && (
+        <section className="panel admin-visual-card admin-patient-status-card">
+          <div className="panel__header">
+            <div>
+              <p className="section-label">Directory health</p>
+              <h2>Patient account status</h2>
+            </div>
+            <span className="admin-visual-caption">All patient profiles</span>
+          </div>
+          {patientStatusData.length ? (
+            <div className="admin-visual-canvas admin-visual-canvas--donut">
+              <ResponsiveContainer height="100%" width="100%">
+                <PieChart>
+                  <Pie
+                    data={patientStatusData}
+                    dataKey="value"
+                    innerRadius={58}
+                    nameKey="name"
+                    outerRadius={86}
+                    paddingAngle={3}
+                  >
+                    <Cell fill="#45bca2" />
+                    <Cell fill="#d87070" />
+                  </Pie>
+                  <Tooltip formatter={(value) => [`${value} accounts`, "Patients"]} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <p className="directory-loading">Account status will appear when patient profiles are added.</p>
+          )}
+        </section>
+      )}
     </div>
   );
 }

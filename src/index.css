@@ -4022,6 +4022,55 @@ td small {
   overflow-wrap: break-word;
   line-height: 1.4;
 }
+
+/* Shared Recharts containers used across the Admin workspace. */
+.admin-visual-card {
+  min-width: 0;
+}
+
+.admin-visual-card h2 {
+  margin: 2px 0 0;
+  color: #34405b;
+  font-family: Manrope, sans-serif;
+  font-size: 18px;
+}
+
+.admin-visual-caption {
+  color: #7b879c;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.admin-visual-canvas {
+  height: 245px;
+  min-width: 0;
+  margin-top: 12px;
+}
+
+.admin-visual-canvas--compact {
+  height: 210px;
+}
+
+.admin-visual-canvas--academic {
+  height: 220px;
+}
+
+.admin-visual-canvas--donut {
+  max-width: 480px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.admin-operations-chart,
+.admin-patient-status-card {
+  margin-top: 20px;
+}
+
+@media (max-width: 700px) {
+  .admin-visual-canvas {
+    height: 220px;
+  }
+}
 .clinical-summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

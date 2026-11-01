@@ -1,5 +1,14 @@
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { fetchGlobalAuditLog } from "../lib/api";
 import Pagination from "../components/Pagination";
 import "./AdminGlobalAuditLogPage.css";
@@ -249,6 +258,19 @@ function AdminGlobalAuditLogPage() {
     setPage(1);
   }
 
+  const actionBreakdown = useMemo(() => {
+    const totals = logs.reduce((counts, entry) => {
+      const label = getActionLabel(entry);
+      counts[label] = (counts[label] || 0) + 1;
+      return counts;
+    }, {});
+
+    return Object.entries(totals)
+      .map(([action, count]) => ({ action, count }))
+      .sort((first, second) => second.count - first.count)
+      .slice(0, 6);
+  }, [logs]);
+
 
   return (
     <div className="dashboard-page content-page">
@@ -342,6 +364,28 @@ function AdminGlobalAuditLogPage() {
 
         </form>
 
+        {!loading && !error && actionBreakdown.length > 0 && (
+          <section className="audit-analytics panel">
+            <div className="panel__header">
+              <div>
+                <p className="section-label">Current result page</p>
+                <h2>Most common recorded activity</h2>
+              </div>
+              <span className="admin-visual-caption">Up to 6 actions</span>
+            </div>
+            <div className="admin-visual-canvas admin-visual-canvas--audit">
+              <ResponsiveContainer height="100%" width="100%">
+                <BarChart data={actionBreakdown} layout="vertical" margin={{ left: 20, right: 8, top: 4 }}>
+                  <CartesianGrid horizontal={false} stroke="#edf0f5" strokeDasharray="3 3" />
+                  <XAxis allowDecimals={false} type="number" tick={{ fontSize: 11 }} />
+                  <YAxis dataKey="action" tick={{ fontSize: 11 }} type="category" width={130} />
+                  <Tooltip formatter={(value) => [`${value} events`, "Recorded"]} />
+                  <Bar dataKey="count" fill="#a175d8" radius={[0, 6, 6, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+        )}
 
         {loading && <p>Loading audit logs...</p>}
 

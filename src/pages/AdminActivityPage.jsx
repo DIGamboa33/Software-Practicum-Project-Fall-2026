@@ -1,5 +1,18 @@
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { fetchAdminActivity } from "../lib/api";
 import "./AdminActivityPage.css";
 
@@ -178,6 +191,23 @@ function AdminActivityPage() {
     return belongsToClassroom && matchesSearch && matchesActivityFilter;
   });
 
+  const classroomEnrollmentData = useMemo(
+    () => visibleClassrooms.map((classroom) => ({
+      name: classroom.short_name || classroom.full_name,
+      students: classroom.studentCount || classroom.students.length,
+    })),
+    [visibleClassrooms],
+  );
+  const noteStatusData = useMemo(() => {
+    const totals = visibleActivity.reduce((counts, item) => {
+      const status = item.noteStatus || "Not Started";
+      counts[status] = (counts[status] || 0) + 1;
+      return counts;
+    }, {});
+
+    return Object.entries(totals).map(([name, value]) => ({ name, value }));
+  }, [visibleActivity]);
+
   // Find the student selected by the Admin.
   const selectedStudent = studentRoster.find(
     (student) => student.id === selectedStudentId
@@ -299,6 +329,52 @@ function AdminActivityPage() {
                 <option value="encounter">Unfinished Encounter</option>
               </select>
             </label>
+          </section>
+
+          <section className="admin-activity-analytics">
+            <article className="panel admin-visual-card">
+              <div className="panel__header">
+                <div>
+                  <p className="section-label">Enrollment snapshot</p>
+                  <h2>Students per classroom</h2>
+                </div>
+              </div>
+              {classroomEnrollmentData.length ? (
+                <div className="admin-visual-canvas admin-visual-canvas--activity">
+                  <ResponsiveContainer height="100%" width="100%">
+                    <BarChart data={classroomEnrollmentData} margin={{ left: -20, right: 8, top: 8 }}>
+                      <CartesianGrid stroke="#edf0f5" strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                      <Tooltip formatter={(value) => [`${value} students`, "Enrollment"]} />
+                      <Bar dataKey="students" fill="#6277d8" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : <p>No classroom enrollment data matches the current filters.</p>}
+            </article>
+
+            <article className="panel admin-visual-card">
+              <div className="panel__header">
+                <div>
+                  <p className="section-label">Documentation progress</p>
+                  <h2>SOAP note status mix</h2>
+                </div>
+              </div>
+              {noteStatusData.length ? (
+                <div className="admin-visual-canvas admin-visual-canvas--activity">
+                  <ResponsiveContainer height="100%" width="100%">
+                    <PieChart>
+                      <Pie data={noteStatusData} dataKey="value" innerRadius={48} nameKey="name" outerRadius={72} paddingAngle={3}>
+                        {noteStatusData.map((item, index) => <Cell fill={["#6277d8", "#45bca2", "#f0a650", "#d87070"][index % 4]} key={item.name} />)}
+                      </Pie>
+                      <Tooltip formatter={(value) => [`${value} assignments`, "Cases"]} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : <p>No case activity matches the current filters.</p>}
+            </article>
           </section>
 
           {/* CLASSROOM TABLE */}

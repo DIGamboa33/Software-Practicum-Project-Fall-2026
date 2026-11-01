@@ -1,4 +1,13 @@
 import { useEffect, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import Icon from "../components/Icon";
 import Pagination from "../components/Pagination";
 import {
@@ -103,11 +112,6 @@ function AdminUserDirectoryPage() {
   }, []);
 
   const selectedUser = directory.users.find((user) => user.id === selectedUserId) || null;
-  const largestRoleCount = Math.max(
-    ...(directory.stats?.roleBreakdown || []).map((role) => role.count),
-    1,
-  );
-
   const selectedRole = accessOptions.roles.find((role) => role.name === selectedUser?.role);
   const selectedSubrole = accessOptions.subroles.find(
     (subrole) => subrole.name === selectedUser?.subrole,
@@ -397,15 +401,25 @@ function AdminUserDirectoryPage() {
           <article className="panel role-chart">
             <p className="section-label">Role distribution</p>
             <h2>Account mix</h2>
-            {(directory.stats?.roleBreakdown || []).map((role) => (
-              <div className="role-chart__row" key={role.name}>
-                <span>{role.name}</span>
-                <i>
-                  <b style={{ width: `${(role.count / largestRoleCount) * 100}%` }} />
-                </i>
-                <strong>{role.count}</strong>
+            {(directory.stats?.roleBreakdown || []).length ? (
+              <div className="admin-visual-canvas admin-visual-canvas--compact">
+                <ResponsiveContainer height="100%" width="100%">
+                  <BarChart
+                    data={directory.stats.roleBreakdown}
+                    layout="vertical"
+                    margin={{ left: -16, right: 12, top: 8, bottom: 2 }}
+                  >
+                    <CartesianGrid horizontal={false} stroke="#edf0f5" />
+                    <XAxis allowDecimals={false} type="number" />
+                    <YAxis dataKey="name" tick={{ fontSize: 12 }} type="category" width={74} />
+                    <Tooltip formatter={(value) => [`${value} accounts`, "Users"]} />
+                    <Bar dataKey="count" fill="#6277d8" radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
-            ))}
+            ) : (
+              <p className="directory-loading">Role distribution will appear once accounts are created.</p>
+            )}
           </article>
 
           <article className="panel audit-log">

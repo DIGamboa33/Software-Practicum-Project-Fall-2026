@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
+import {
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+} from "recharts";
 import { fetchAdminUsers } from "../../lib/api";
+
+const ADMIN_CHART_COLORS = ["#6277d8", "#45bca2", "#f0a650", "#a175d8"];
 
 const dashboardContent = {
   Instructor: {
@@ -143,6 +153,8 @@ function AdminOperationsDashboard({ user }) {
     },
   ];
 
+  const roleBreakdown = stats?.roleBreakdown || [];
+
 
   return (
     <div className="dashboard-page content-page role-dashboard">
@@ -194,6 +206,43 @@ function AdminOperationsDashboard({ user }) {
           </article>
         ))}
 
+      </section>
+
+      <section className="panel admin-visual-card admin-operations-chart">
+        <div className="panel__header">
+          <div>
+            <p className="section-label">Account composition</p>
+            <h2>Careflow users by role</h2>
+          </div>
+          <span className="admin-visual-caption">Live directory data</span>
+        </div>
+        {roleBreakdown.length ? (
+          <div className="admin-visual-canvas admin-visual-canvas--donut">
+            <ResponsiveContainer height="100%" width="100%">
+              <PieChart>
+                <Pie
+                  data={roleBreakdown}
+                  dataKey="count"
+                  innerRadius={58}
+                  nameKey="name"
+                  outerRadius={86}
+                  paddingAngle={3}
+                >
+                  {roleBreakdown.map((role, index) => (
+                    <Cell
+                      fill={ADMIN_CHART_COLORS[index % ADMIN_CHART_COLORS.length]}
+                      key={role.name}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => [`${value} accounts`, "Users"]} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <p className="directory-loading">Role distribution will appear once accounts are created.</p>
+        )}
       </section>
 
 
