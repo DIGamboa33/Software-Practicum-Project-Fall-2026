@@ -4000,3 +4000,12 @@ td small {
 .rubric-editor { display: grid; gap: 8px; }
 .rubric-editor p { margin: 0; font-weight: 600; font-size: 0.9rem; }
 .rubric-editor__row { display: grid; grid-template-columns: 1fr 90px 36px; gap: 8px; align-items: center; }
+
+.assigned-cases details summary { cursor: pointer; color: #3d4f9f; }
+.assigned-cases ul { margin: 8px 0 0; padding-left: 18px; }
+
+.assigned-cases {
+  padding: 24px 28px;
+  margin-top: 24px;
+  margin-bottom: 24px;
+}

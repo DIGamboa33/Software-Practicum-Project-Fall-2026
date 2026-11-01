@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   addInstructorGroupMembers,
   createInstructorClassroomGroup,
+  fetchInstructorAssignments,
   fetchInstructorClassroom,
   fetchInstructorClassrooms,
 } from "../lib/api";
@@ -22,8 +23,25 @@ function InstructorClassesPage({ user }) {
   const [notice, setNotice] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
-  
 
+  const [assignedCases, setAssignedCases] = useState([]);
+
+const NOTE_LABELS = {
+  Draft: "Draft",
+  "Pending Review": "Submitted",
+  Returned: "Returned",
+  Approved: "Approved",
+};
+
+async function loadAssignedCases(id) {
+  try {
+    const result = await fetchInstructorAssignments(id);
+    setAssignedCases(result.assignments);
+  } catch (assignedError) {
+    setError(assignedError instanceof Error ? assignedError.message : "Unable to load assigned cases.");
+  }
+}
+  
   useEffect(() => {
     let isCurrent = true;
     async function load() {
@@ -59,6 +77,21 @@ function InstructorClassesPage({ user }) {
     }
     loadDetail();
     return () => { isCurrent = false; };
+  }, [classroomId]);
+
+  useEffect(() => {
+  if (!classroomId) return undefined;
+  let isCurrent = true;
+  fetchInstructorAssignments(classroomId)
+    .then((result) => {
+      if (isCurrent) setAssignedCases(result.assignments);
+    })
+    .catch((assignedError) => {
+      if (isCurrent) setError(assignedError instanceof Error ? assignedError.message : "Unable to load assigned cases.");
+    });
+  return () => {
+    isCurrent = false;
+  };
   }, [classroomId]);
 
   function toggleGroupStudent(studentId) {
@@ -224,6 +257,64 @@ function InstructorClassesPage({ user }) {
             </article>
           </section>
 
+          <section className="panel assigned-cases">
+            <div className="panel__header">
+              <div>
+                <p className="section-label">Assigned cases</p>
+                <h2>Cases in {classroom.short_name}</h2>
+              </div>
+              <span className="preview-label">{assignedCases.length} cases</span>
+            </div>
+
+            {assignedCases.length ? (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Case</th>
+                      <th>Note type</th>
+                      <th>Due</th>
+                      <th>Students</th>
+                      <th>Submitted</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assignedCases.map((item) => {
+                      const submitted = item.students.filter(
+                        (student) => student.noteStatus === "Pending Review" || student.noteStatus === "Approved",
+                      ).length;
+                      return (
+                        <tr key={item.caseId}>
+                          <td>
+                            <strong>{item.title}</strong>
+                            <small>Patient: {item.patientName}</small>
+                          </td>
+                          <td>{item.noteType.toUpperCase()}</td>
+                          <td>{item.dueAt ? new Date(item.dueAt).toLocaleString() : "No due date"}</td>
+                          <td>
+                            <details>
+                              <summary>{item.students.length} student{item.students.length === 1 ? "" : "s"}</summary>
+                              <ul>
+                                {item.students.map((student) => (
+                                  <li key={student.assignmentId}>
+                                    {student.name}: {NOTE_LABELS[student.noteStatus] || student.noteStatus}
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
+                          </td>
+                          <td>{submitted} / {item.students.length}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="directory-loading">No cases have been assigned in this class yet.</p>
+            )}
+          </section>
+
           <section className="panel group-overview-panel">
             <div className="panel__header">
               <div><p className="section-label">Classroom groups</p><h2>Learning teams</h2></div>
@@ -361,7 +452,10 @@ function InstructorClassesPage({ user }) {
                   {isAssignOpen && (
             <AssignCaseModal
               classroom={classroom}
-              onAssigned={(result) => setNotice(result.message)}
+              onAssigned={(result) => {
+                          setNotice(result.message);
+                          loadAssignedCases(classroomId);
+                        }}
               onClose={() => setIsAssignOpen(false)}
               students={classroomDetail.students}
             />
