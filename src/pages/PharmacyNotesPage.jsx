@@ -14,29 +14,9 @@ const INSTRUCTORS = [
   { id: "demo-instructor", name: "Demo Instructor" },
 ];
 
-const ICD = [
-  ["I10", "Essential (primary) hypertension"],
-  ["E11.9", "Type 2 diabetes mellitus without complications"],
-  ["E78.5", "Hyperlipidemia, unspecified"],
-  ["J45.909", "Unspecified asthma, uncomplicated"],
-  ["I50.9", "Heart failure, unspecified"],
-  ["K21.9", "Gastro-esophageal reflux disease without esophagitis"],
-  ["E03.9", "Hypothyroidism, unspecified"],
-  ["F32.A", "Depression, unspecified"],
-  ["N18.9", "Chronic kidney disease, unspecified"],
-  ["R42", "Dizziness and giddiness"],
-];
-
-const CPT = ["99211", "99212", "99213", "99214", "99215"].map(
-  (code, index) => [
-    code,
-    `Established patient office visit — level ${index + 1}`,
-  ]
-);
-
 const TEMPLATES = {
   pharmacy_soap: {
-    label: "SOAP",
+    label: "SOAP (Subjective, Objective, Assessment, Plan)",
     sections: [
       ["Subjective", [
         ["hpi", "History of Present Illness / OLDCARTS"],
@@ -63,7 +43,7 @@ const TEMPLATES = {
     ],
   },
   pharmacy_sbar: {
-    label: "SBAR",
+    label: "SBAR (Situation, Background, Assessment, Recommendation)",
     sections: [
       ["Situation", [
         ["situation", "Current Situation / Reason for Communication"],
@@ -86,6 +66,45 @@ const TEMPLATES = {
       ]],
     ],
   },
+  
+  pharmacy_mtm: {
+    label: "MTM (Medication Therapy Management)",
+    sections: [
+      ["Patient Assessment", [
+        ["reasonForVisit", "Reason for MTM Visit"],
+        ["patientConcerns", "Patient Concerns and Goals"],
+        ["medicalHistory", "Relevant Medical History"],
+        ["allergies", "Medication Allergies / Reactions"],
+        ["adherence", "Medication Adherence / Barriers"],
+        ["clinicalFindings", "Relevant Vitals / Laboratory Results"],
+      ]],
+
+      ["Medication Review", [
+        ["medicationReconciliation", "Medication Reconciliation Summary"],
+        ["medicationDiscrepancies", "Medication Discrepancies"],
+        ["effectiveness", "Medication Effectiveness"],
+        ["safety", "Medication Safety / Interactions"],
+        ["drugTherapyProblems", "Drug Therapy Problems Identified"],
+        ["priorityProblems", "Priority / Clinical Significance"],
+      ]],
+
+      ["Medication Action Plan", [
+        ["recommendations", "Pharmacist Recommendations"],
+        ["medicationChanges", "Proposed Medication Changes"],
+        ["patientEducation", "Patient Education / Counseling"],
+        ["patientActions", "Patient Medication Action Plan"],
+        ["providerCommunication", "Prescriber Communication"],
+      ]],
+
+      ["Follow-up", [
+        ["monitoring", "Monitoring Parameters / Clinical Goals"],
+        ["followUpDate", "Follow-up Date / Interval"],
+        ["followUpPlan", "Follow-up / Reassessment Plan"],
+        ["outcomes", "Outcomes / Unresolved Problems"],
+      ]],
+    ],
+  },
+
 };
 
 const VITALS = [
@@ -101,7 +120,6 @@ const VITALS = [
 
 const PROBLEM = [
   ["name", "Diagnosis / Clinical Problem"],
-  ["icd10", "ICD-10 Code"],
   ["status", "Problem Status / Priority"],
   ["evidence", "Supporting Clinical Evidence"],
   ["reasoning", "Clinical Rationale"],
@@ -228,74 +246,6 @@ function Field({ label, value, change, type = "textarea", options, disabled }) {
   );
 }
 
-function Search({ label, codes, value, onPick, disabled }) {
-  const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    const item = codes.find(([code]) => code === value);
-    setQuery(item ? item.join(" — ") : value || "");
-  }, [value, codes]);
-
-  const results = codes.filter(([code, description]) =>
-    `${code} ${description}`.toLowerCase().includes(query.toLowerCase())
-  );
-
-  return (
-    <div style={{ position: "relative", marginBottom: "1rem" }}>
-      <Field
-        label={label}
-        type="text"
-        value={query}
-        disabled={disabled}
-        change={(value) => {
-          setQuery(value);
-          setOpen(true);
-        }}
-      />
-
-      {!disabled && (
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={() => setOpen(!open)}
-        >
-          {open ? "Hide Results" : "Search"}
-        </button>
-      )}
-
-      {open && !disabled && (
-        <div
-          className="panel"
-          style={{
-            ...box,
-            position: "absolute",
-            zIndex: 5,
-            width: "100%",
-            maxHeight: 220,
-            overflowY: "auto",
-          }}
-        >
-          {results.map(([code, description]) => (
-            <button
-              key={code}
-              type="button"
-              className="secondary-button"
-              style={{ display: "block", width: "100%", textAlign: "left" }}
-              onClick={() => {
-                onPick(code, description);
-                setOpen(false);
-              }}
-            >
-              {code} — {description}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function Details({ items }) {
   return items.map(([label, value]) => (
     <p key={label}>
@@ -333,6 +283,8 @@ export default function PharmacyNotesPage({
   const [sectionName, sectionFields] = template.sections[tab] || template.sections[0];
 
   const soap = draft?.type === "pharmacy_soap";
+  const sbar = draft?.type === "pharmacy_sbar";
+  const mtm = draft?.type === "pharmacy_mtm";
   const content = draft?.content || {};
   const vitals = draft?.vitals || {};
   const problems = draft?.problems || [];
@@ -687,20 +639,6 @@ async function deleteDraft(note) {
           <div className="panel" style={box}>
             <h4>{singular}</h4>
 
-            {isProblem && (
-              <Search
-                label="Search ICD-10 Diagnosis"
-                codes={ICD}
-                value={editor.value.icd10}
-                onPick={(code, description) =>
-                  setEditor((current) => ({
-                    ...current,
-                    value: { ...current.value, name: description, icd10: code },
-                  }))
-                }
-              />
-            )}
-
             {fields(
               fieldList,
               editor.value,
@@ -902,7 +840,7 @@ async function deleteDraft(note) {
             <Field
               label="Note Type"
               value={draft.type}
-              disabled={readOnly}
+              disabled={readOnly || draft.fromDatabase}
               options={Object.entries(TEMPLATES).map(([value, item]) => ({
                 value,
                 label: item.label,
@@ -991,7 +929,32 @@ async function deleteDraft(note) {
           >
             <h3>{sectionName}</h3>
 
+            
+            {mtm && tab === 0 && (
+              <div className="panel" style={box}>
+                <h4>Patient Chart (Read-only)</h4>
+                <Details items={chart} />
+                <p>
+                  <strong>Existing Clinical Results:</strong>{" "}
+                  {shown(patient.results)}
+                </p>
+              </div>
+            )}
+
+
             {soap && tab === 0 && (
+              <>
+                <div className="panel" style={box}>
+                  <h4>Patient Chart (Read-only)</h4>
+                  <Details items={chart} />
+                </div>
+                
+                <h4>Patient-Reported Information</h4>
+              </>
+            )}
+
+            
+            {mtm && tab === 1 && (
               <>
                 <div className="panel" style={box}>
                   <h4>Patient Chart (Read-only)</h4>
@@ -999,9 +962,9 @@ async function deleteDraft(note) {
                 </div>
 
                 {listEntries("medications", medications, MEDICATION)}
-                <h4>Patient-Reported Information</h4>
               </>
             )}
+
 
             {soap && tab === 1 && (
               <div className="panel" style={box}>
@@ -1058,9 +1021,6 @@ async function deleteDraft(note) {
                   <div key={problem.id} className="panel" style={box}>
                     <h4>Problem {index + 1}: {problem.name || "Untitled"}</h4>
 
-                    <p>
-                      ICD-10: {shown(problem.icd10)} · Goal: {shown(problem.goal)}
-                    </p>
 
                     {fields(PLAN, problem, (key, value) =>
                       update({
@@ -1074,43 +1034,10 @@ async function deleteDraft(note) {
                   </div>
                 ))}
 
-                <div className="panel" style={box}>
-                  <h4>Encounter Coding</h4>
-
-                  <Search
-                    label="Search CPT Code"
-                    codes={CPT}
-                    value={content.cpt}
-                    disabled={readOnly}
-                    onPick={(code) => contentField("cpt", code)}
-                  />
-
-                  <Field
-                    label="CPT Code"
-                    value={content.cpt}
-                    disabled={readOnly}
-                    options={[
-                      { value: "", label: "Select CPT Code" },
-                      ...CPT.map(([code]) => code),
-                      "Other",
-                    ]}
-                    change={(value) => contentField("cpt", value)}
-                  />
-
-                  {content.cpt === "Other" && (
-                    <Field
-                      label="Other CPT Code"
-                      type="text"
-                      value={content.otherCpt}
-                      disabled={readOnly}
-                      change={(value) => contentField("otherCpt", value)}
-                    />
-                  )}
-                </div>
               </>
             )}
 
-            {!soap && tab === 1 && (
+            {sbar && tab === 1 && (
               <div className="panel" style={box}>
                 <h4>Patient Chart (Read-only)</h4>
                 <Details items={chart} />
@@ -1119,7 +1046,7 @@ async function deleteDraft(note) {
 
             {fields(sectionFields, content, contentField)}
 
-            {!soap && tab === 3 && (
+            {sbar && tab === 3 && (
               <div className="panel" style={box}>
                 <h4>Communication Details</h4>
 
