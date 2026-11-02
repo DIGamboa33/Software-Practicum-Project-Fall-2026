@@ -57,7 +57,6 @@ function ageFromDob(dob) {
 }
 
 const lines = (text) => text.split("\n").map((line) => line.trim()).filter(Boolean);
-const cleaned = (items) => items.map((item) => item.trim()).filter(Boolean);
 
 // One prefilled field the instructor can remove or restore
 function Slot({ id, label, removed, onToggle, children }) {
@@ -75,36 +74,82 @@ function Slot({ id, label, removed, onToggle, children }) {
 }
 
 // A list of prefilled items (history, medications, allergies), each removable
-function ListSlot({ label, items, setItems, placeholder }) {
+const toItems = (texts) =>
+  texts.map((text) => ({ id: crypto.randomUUID(), text, hidden: false }));
+
+// Only the items still shown are sent to the case
+const visibleTexts = (items) =>
+  items.filter((item) => !item.hidden).map((item) => item.text.trim()).filter(Boolean);
+
+// Prefilled items as pills. The x hides one, and hidden pills can be brought back.
+function ChipSlot({ label, items, setItems, placeholder }) {
+  const [draft, setDraft] = useState("");
+  const shown = items.filter((item) => !item.hidden);
+  const hidden = items.filter((item) => item.hidden);
+
+  function setHidden(id, value) {
+    setItems((current) => current.map((item) => (item.id === id ? { ...item, hidden: value } : item)));
+  }
+
+  function addDraft() {
+    const text = draft.trim();
+    if (!text) return;
+    setItems((current) => [...current, { id: crypto.randomUUID(), text, hidden: false }]);
+    setDraft("");
+  }
+
   return (
-    <div className="admin-form__slot">
-      <div className="assign-slot__head">
-        <span>{label}</span>
+    <div className="chip-slot">
+      <span className="chip-slot__label">{label}</span>
+
+      <div className="chip-list">
+        {shown.length === 0 && <span className="chip-slot__empty">None shown</span>}
+        {shown.map((item) => (
+          <span className="chip" key={item.id}>
+            {item.text}
+            <button aria-label={`Hide ${item.text}`} onClick={() => setHidden(item.id, true)} type="button">
+              ×
+            </button>
+          </span>
+        ))}
       </div>
-      {items.length === 0 && <p className="assign-slot__empty">None</p>}
-      {items.map((item, index) => (
-        <div className="assign-list-row" key={index}>
-          <input
-            aria-label={`${label} ${index + 1}`}
-            onChange={(event) =>
-              setItems((current) => current.map((value, i) => (i === index ? event.target.value : value)))
+
+      <div className="chip-add">
+        <input
+          aria-label={`Add ${label}`}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              addDraft();
             }
-            placeholder={placeholder}
-            value={item}
-          />
-          <button
-            aria-label={`Remove ${label} ${index + 1}`}
-            className="row-action"
-            onClick={() => setItems((current) => current.filter((_, i) => i !== index))}
-            type="button"
-          >
-            ×
-          </button>
+          }}
+          placeholder={placeholder}
+          value={draft}
+        />
+        <button className="text-button" onClick={addDraft} type="button">
+          + Add
+        </button>
+      </div>
+
+      {hidden.length > 0 && (
+        <div className="chip-hidden">
+          <span>Hidden. Click one to show it again.</span>
+          <div className="chip-list">
+            {hidden.map((item) => (
+              <button
+                aria-label={`Show ${item.text}`}
+                className="chip chip--hidden"
+                key={item.id}
+                onClick={() => setHidden(item.id, false)}
+                type="button"
+              >
+                + {item.text}
+              </button>
+            ))}
+          </div>
         </div>
-      ))}
-      <button className="text-button" onClick={() => setItems((current) => [...current, ""])} type="button">
-        + Add
-      </button>
+      )}
     </div>
   );
 }
@@ -224,9 +269,9 @@ function AssignCaseModal({ classrooms, initialDetail, onClose, onAssigned }) {
         patientSex: patient.sex || "",
         results: vitalsText(patient.vitals),
       }));
-      setMedications((patient.medications || []).map(medicationText).filter(Boolean));
-      setAllergies((patient.allergies || []).map(allergyText).filter(Boolean));
-      setHistory((patient.medicalHistory || []).map(historyText).filter(Boolean));
+      setMedications(toItems((patient.medications || []).map(medicationText).filter(Boolean)));
+      setAllergies(toItems((patient.allergies || []).map(allergyText).filter(Boolean)));
+      setHistory(toItems((patient.medicalHistory || []).map(historyText).filter(Boolean)));
       setRemoved({});
     } catch (prefillError) {
       setError(prefillError.message);
@@ -260,9 +305,9 @@ function AssignCaseModal({ classrooms, initialDetail, onClose, onAssigned }) {
           patientAge: age,
           patientSex: keep("patientSex", form.patientSex),
           chiefComplaint: keep("chiefComplaint", form.chiefComplaint),
-          history: cleaned(history).join("; "),
-          medications: cleaned(medications),
-          allergies: cleaned(allergies),
+          history: visibleTexts(history).join("; "),
+          medications: visibleTexts(medications),
+          allergies: visibleTexts(allergies),
           results: keep("results", form.results),
         },
         expectations: {
@@ -431,19 +476,9 @@ function AssignCaseModal({ classrooms, initialDetail, onClose, onAssigned }) {
               />
             </Slot>
 
-            <ListSlot items={history} label="Medical history" placeholder="Condition" setItems={setHistory} />
-            <ListSlot
-              items={medications}
-              label="Medications"
-              placeholder="Medication, dose, frequency"
-              setItems={setMedications}
-            />
-            <ListSlot
-              items={allergies}
-              label="Allergies"
-              placeholder="Allergen and reaction"
-              setItems={setAllergies}
-            />
+            <ChipSlot items={history} label="Medical history" placeholder="Add a condition" setItems={setHistory} />
+            <ChipSlot items={medications} label="Medications" placeholder="Add a medication, dose, frequency" setItems={setMedications} />
+            <ChipSlot items={allergies} label="Allergies" placeholder="Add an allergen and reaction" setItems={setAllergies} /> 
 
             <Slot
               id="results"

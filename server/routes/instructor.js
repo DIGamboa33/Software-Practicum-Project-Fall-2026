@@ -762,7 +762,7 @@ instructorRouter.patch(
   });
 
 // ---- Create a case and assign it to students in a classroom ----
-const ASSIGNABLE_NOTE_TYPES = ["soap"];
+const ASSIGNABLE_NOTE_TYPES = ["soap", "sbar"];
 
 function cleanText(value, maxLength) {
   return String(value ?? "").trim().slice(0, maxLength);

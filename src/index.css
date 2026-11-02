@@ -4057,12 +4057,27 @@ td small {
   grid-template-columns: 1fr 1fr; gap: 13px; 
 }
 
-.assign-list-row { 
-  display: grid; 
-  grid-template-columns: 1fr 34px; 
-  gap: 8px; 
-  align-items: center; 
+.chip-slot { display: grid; gap: 8px; }
+.chip-slot__label { color: #65738b; font-size: 11px; font-weight: 700; }
+.chip-slot__empty { color: #9ba5b5; font-size: 12px; }
+.chip-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 8px 6px 12px; border: 1px solid #cad5f3; border-radius: 999px;
+  color: #455783; background: #f3f6ff; font: inherit; font-size: 12px;
 }
+.chip button {
+  display: grid; place-items: center; width: 18px; height: 18px; padding: 0;
+  border: 0; border-radius: 50%; color: #5368b9; background: #dfe6fb; font-size: 13px; line-height: 1; cursor: pointer;
+}
+.chip button:hover { background: #c9d4f7; }
+.chip--hidden {
+  padding: 6px 12px; border-style: dashed; color: #8a94a8; background: #fafbfd; cursor: pointer;
+}
+.chip--hidden:hover { color: #455783; border-color: #7690df; }
+.chip-add { display: flex; gap: 8px; align-items: center; }
+.chip-hidden { display: grid; gap: 6px; padding-top: 8px; border-top: 1px dashed #dce2ed; }
+.chip-hidden > span { color: #9ba5b5; font-size: 11px; }
 
 .rubric-editor__row { 
   display: grid; 
