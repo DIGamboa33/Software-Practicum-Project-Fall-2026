@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import Icon from "../components/Icon";
 import Pagination from "../components/Pagination";
-import { fetchPatientDashboard, updateReferralAppointment, schedulePatientAppointment } from "../lib/api";
+import { fetchPatientDashboard } from "../lib/api";
 
 function PatientHealthInsightsPage() {
   const [dashboard, setDashboard] = useState(null);
@@ -15,12 +15,8 @@ function PatientHealthInsightsPage() {
   const [referralPage, setReferralPage] = useState(1);
   const [referralsPerPage, setReferralsPerPage] = useState(5);
 
-  // Modal state for scheduling from a referral
-  const [selectedReferral, setSelectedReferral] = useState(null);
-  const [reason, setReason] = useState("");
-  const [appointmentDate, setAppointmentDate] = useState("");
-  const [location, setLocation] = useState("Specialty Clinic Room B");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedUpdate, setSelectedUpdate] = useState(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
 
   async function loadData() {
     try {
@@ -38,33 +34,6 @@ function PatientHealthInsightsPage() {
     loadData();
   }, []);
 
-  async function handleScheduleReferral(e) {
-    e.preventDefault();
-    if (!selectedReferral) return;
-
-    try {
-      setIsSubmitting(true);
-      // 1. Create the appointment first
-      const newApt = await schedulePatientAppointment({
-        reason: `Specialist Visit: ${selectedReferral.specialty} - ${selectedReferral.reason}`,
-        appointment_date: appointmentDate,
-        location,
-      });
-
-      // 2. Link the referral to this appointment and update status to Approved
-      await updateReferralAppointment(selectedReferral.id, newApt.id);
-
-      setSelectedReferral(null);
-      setReason("");
-      setAppointmentDate("");
-      loadData();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to schedule referral appointment.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
   if (isLoading) {
     return (
       <div className="dashboard-page content-page">
@@ -81,7 +50,6 @@ function PatientHealthInsightsPage() {
 
   const filteredUpdates = updates.filter(u => {
     if (updateFilter === "All") return true;
-    
     const type = (u.update_type || "").toLowerCase();
     if (updateFilter === "Lab Result") {
       return type.includes("lab") || type.includes("test") || type.includes("result");
@@ -91,11 +59,13 @@ function PatientHealthInsightsPage() {
     }
     return type.includes(updateFilter.toLowerCase());
   });
+
   const updateCategoryData = Object.entries(updates.reduce((counts, update) => {
     const category = update.update_type || "General";
     counts[category] = (counts[category] || 0) + 1;
     return counts;
   }, {})).map(([name, count]) => ({ name, updates: count }));
+
   const updatesOverTime = Object.entries(updates.reduce((counts, update) => {
     const date = new Date(update.created_at);
     if (Number.isNaN(date.getTime())) return counts;
@@ -109,13 +79,25 @@ function PatientHealthInsightsPage() {
       date: new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
       updates: count,
     }));
+
   const referralStatusData = Object.entries(referrals.reduce((counts, referral) => {
     const status = referral.status || "Unspecified";
     counts[status] = (counts[status] || 0) + 1;
     return counts;
   }, {})).map(([name, count]) => ({ name, referrals: count }));
+
   const visibleUpdates = filteredUpdates.slice((updatePage - 1) * updatesPerPage, updatePage * updatesPerPage);
   const visibleReferrals = referrals.slice((referralPage - 1) * referralsPerPage, referralPage * referralsPerPage);
+
+  function handleOpenUpdateModal(update) {
+    setSelectedUpdate(update);
+    setShowUpdateModal(true);
+  }
+
+  function handleCloseUpdateModal() {
+    setShowUpdateModal(false);
+    setSelectedUpdate(null);
+  }
 
   return (
     <div className="dashboard-page content-page">
@@ -129,7 +111,6 @@ function PatientHealthInsightsPage() {
 
       {error && <section className="panel directory-error" style={{ marginTop: "20px" }}>{error}</section>}
 
-      {/* Tabs Bar */}
       <div className="case-tabs-bar" style={{ marginTop: "24px" }}>
         <div className="case-tabs">
           <button
@@ -179,7 +160,6 @@ function PatientHealthInsightsPage() {
         </article>
       </section>
 
-      {/* Tab 1: Clinical Updates with Category Filters */}
       {activeTab === "updates" && (
         <section className="panel">
           <div className="panel__header">
@@ -198,14 +178,23 @@ function PatientHealthInsightsPage() {
             </div>
           </div>
 
-          <div className="updates-list patient-scroll-list" style={{ marginTop: "20px" }}>
+          <p style={{ fontSize: "13px", color: "#64748b", marginTop: "12px", padding: "0 4px" }}>
+            * Click any update or lab result below to read plain-language breakdowns, normal range indicators, and recommendations.
+          </p>
+
+          <div className="updates-list patient-scroll-list" style={{ marginTop: "16px" }}>
             {filteredUpdates.length === 0 ? (
               <p className="empty-list-message" style={{ padding: "20px", textAlign: "center" }}>
                 No updates found for this category.
               </p>
             ) : (
               visibleUpdates.map((update) => (
-                <div className="update" key={update.id}>
+                <div 
+                  className="update" 
+                  key={update.id} 
+                  onClick={() => handleOpenUpdateModal(update)}
+                  style={{ cursor: "pointer", transition: "background 0.2s", borderRadius: "8px", padding: "10px" }}
+                >
                   <span className="update__dot" style={{ background: update.is_read ? "#d4d9e2" : "#7de4cf" }} />
                   <div>
                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -213,6 +202,11 @@ function PatientHealthInsightsPage() {
                       {update.update_type && <span className="preview-label">{update.update_type}</span>}
                     </div>
                     <p>{update.content}</p>
+                    {update.description && (
+                      <p style={{ fontSize: "12px", color: "#475569", marginTop: "4px", fontStyle: "italic" }}>
+                        <strong>Summary:</strong> {update.description}
+                      </p>
+                    )}
                   </div>
                   <time>{new Date(update.created_at).toLocaleDateString()}</time>
                 </div>
@@ -223,7 +217,6 @@ function PatientHealthInsightsPage() {
         </section>
       )}
 
-      {/* Tab 2: Referrals with Appointment Connections */}
       {activeTab === "referrals" && (
         <section className="panel">
           <div className="panel__header">
@@ -249,24 +242,6 @@ function PatientHealthInsightsPage() {
                       {ref.status}
                     </span>
                   </div>
-                  <div>
-                    {ref.status === "Pending" ? (
-                      <button
-                        className="primary-button"
-                        type="button"
-                        onClick={() => {
-                          setSelectedReferral(ref);
-                          setReason(`Consultation: ${ref.specialty}`);
-                        }}
-                      >
-                        Schedule Visit ↗
-                      </button>
-                    ) : (
-                      <span style={{ fontSize: "11px", color: "#48546f", fontWeight: "700" }}>
-                        {ref.linked_appointment_id ? "Appointment Linked ✓" : "In Progress"}
-                      </span>
-                    )}
-                  </div>
                 </div>
               ))
             )}
@@ -275,10 +250,8 @@ function PatientHealthInsightsPage() {
         </section>
       )}
 
-      {/* Tab 3: Medical Records (History, Medications, Allergies) */}
       {activeTab === "records" && (
         <div style={{ display: "grid", gap: "20px" }}>
-          {/* Medical History */}
           <section className="panel">
             <div className="panel__header">
               <h2><Icon name="grid" size={17} /> Diagnoses & Medical History</h2>
@@ -298,7 +271,6 @@ function PatientHealthInsightsPage() {
             </div>
           </section>
 
-          {/* Medications */}
           <section className="panel">
             <div className="panel__header">
               <h2><Icon name="settings" size={17} /> Active Medications</h2>
@@ -317,7 +289,6 @@ function PatientHealthInsightsPage() {
             </div>
           </section>
 
-          {/* Allergies */}
           <section className="panel">
             <div className="panel__header">
               <h2><Icon name="bell" size={17} /> Allergies & Adverse Reactions</h2>
@@ -345,55 +316,39 @@ function PatientHealthInsightsPage() {
         </div>
       )}
 
-      {/* Schedule Modal for Pending Referrals */}
-      {selectedReferral && (
-        <div className="sidebar-backdrop" style={{ display: "grid", placeItems: "center", zIndex: 10 }}>
-          <section className="panel" style={{ width: "min(90%, 460px)", padding: "28px" }}>
-            <div className="panel__header">
-              <h2>Schedule Referral Visit</h2>
-              <button className="more-button" type="button" onClick={() => setSelectedReferral(null)}>✕</button>
-            </div>
-            <p className="muted-copy" style={{ marginTop: "8px" }}>
-              Booking specialist appointment for <strong>{selectedReferral.specialty}</strong>.
-            </p>
-            <form onSubmit={handleScheduleReferral} className="scenario-form" style={{ marginTop: "16px" }}>
-              <label>
-                Reason for Visit
-                <input
-                  type="text"
-                  required
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                />
-              </label>
-              <label>
-                Date & Time
-                <input
-                  type="datetime-local"
-                  required
-                  value={appointmentDate}
-                  onChange={(e) => setAppointmentDate(e.target.value)}
-                />
-              </label>
-              <label>
-                Clinic Location / Room
-                <input
-                  type="text"
-                  required
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                />
-              </label>
-              <div className="form-actions" style={{ marginTop: "16px" }}>
-                <button className="secondary-button" type="button" onClick={() => setSelectedReferral(null)}>
-                  Cancel
-                </button>
-                <button className="primary-button" type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? "Booking..." : "Confirm & Link Referral"}
-                </button>
+      {showUpdateModal && selectedUpdate && (
+        <div className="modal-overlay" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
+          <div className="modal-content panel" style={{ background: "#fff", maxWidth: "600px", width: "100%", padding: "24px", borderRadius: "12px", boxShadow: "0 10px 25px rgba(0,0,0,0.1)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <div>
+                <span className="section-label">{selectedUpdate.update_type || "Clinical Update"}</span>
+                <h2 style={{ margin: "4px 0 0 0" }}>{selectedUpdate.title}</h2>
               </div>
-            </form>
-          </section>
+              <button type="button" onClick={handleCloseUpdateModal} style={{ background: "none", border: "none", fontSize: "18px", cursor: "pointer" }}>✕</button>
+            </div>
+
+            <div style={{ display: "grid", gap: "16px", fontSize: "14px" }}>
+              <div>
+                <strong>Recorded Date:</strong> {new Date(selectedUpdate.created_at).toLocaleDateString()}
+              </div>
+
+              <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "8px" }}>
+                <strong>Raw Result / Content:</strong>
+                <p style={{ margin: "6px 0 0 0", color: "#334155", lineHeight: "1.5" }}>{selectedUpdate.content}</p>
+              </div>
+
+              <div style={{ background: "#eff6ff", padding: "14px", borderRadius: "8px", border: "1px solid #bfdbfe" }}>
+                <strong style={{ color: "#1e40af" }}>Patient-Friendly Explanation & Recommendations:</strong>
+                <p style={{ margin: "6px 0 0 0", color: "#1e3a8a", lineHeight: "1.5" }}>
+                  {selectedUpdate.description || "This reading falls within standard parameters. Continue with your routine health habits and consult your care provider if you have any questions."}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ marginTop: "24px", display: "flex", justifyContent: "flex-end" }}>
+              <button type="button" className="roster-view-button roster-view-button--active" onClick={handleCloseUpdateModal}>Close</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

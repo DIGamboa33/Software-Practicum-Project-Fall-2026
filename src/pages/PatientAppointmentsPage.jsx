@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import Icon from "../components/Icon";
 import Pagination from "../components/Pagination";
-import { fetchPatientAppointments, fetchPatientVitals, schedulePatientAppointment } from "../lib/api";
+import { fetchPatientAppointments, fetchPatientVitals } from "../lib/api";
 
 function PatientAppointmentsPage() {
   const [appointments, setAppointments] = useState([]);
@@ -10,15 +10,12 @@ function PatientAppointmentsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("upcoming");
-  const [showModal, setShowModal] = useState(false);
   const [appointmentPage, setAppointmentPage] = useState(1);
   const [appointmentsPerPage, setAppointmentsPerPage] = useState(5);
 
-  // Form state
-  const [reason, setReason] = useState("");
-  const [appointmentDate, setAppointmentDate] = useState("");
-  const [location, setLocation] = useState("Main Clinic Room A");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState(null);
+  const [selectedVitals, setSelectedVitals] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   async function loadData() {
     try {
@@ -40,30 +37,11 @@ function PatientAppointmentsPage() {
     loadData();
   }, []);
 
-  async function handleSchedule(e) {
-    e.preventDefault();
-    try {
-      setIsSubmitting(true);
-      await schedulePatientAppointment({
-        reason,
-        appointment_date: appointmentDate,
-        location,
-      });
-      setShowModal(false);
-      setReason("");
-      setAppointmentDate("");
-      loadData();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to schedule.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
   const now = new Date();
   const upcoming = appointments.filter((a) => new Date(a.appointment_date) >= now);
   const past = appointments.filter((a) => new Date(a.appointment_date) < now);
   const displayedAppointments = activeTab === "upcoming" ? upcoming : past;
+  
   const appointmentStatusData = useMemo(() => {
     const totals = appointments.reduce((counts, appointment) => {
       const status = appointment.status || "Unspecified";
@@ -72,6 +50,7 @@ function PatientAppointmentsPage() {
     }, {});
     return Object.entries(totals).map(([name, count]) => ({ name, appointments: count }));
   }, [appointments]);
+
   const visibleAppointments = displayedAppointments.slice(
     (appointmentPage - 1) * appointmentsPerPage,
     appointmentPage * appointmentsPerPage,
@@ -79,6 +58,18 @@ function PatientAppointmentsPage() {
   const timelineAppointments = [...appointments]
     .sort((first, second) => new Date(first.appointment_date) - new Date(second.appointment_date))
     .slice(0, 6);
+
+  function handleOpenModal(apt) {
+    setSelectedAppointment(apt);
+    setSelectedVitals(vitals.find((v) => v.appointment_id === apt.id) || null);
+    setShowDetailModal(true);
+  }
+
+  function handleCloseModal() {
+    setShowDetailModal(false);
+    setSelectedAppointment(null);
+    setSelectedVitals(null);
+  }
 
   if (isLoading) {
     return (
@@ -96,14 +87,10 @@ function PatientAppointmentsPage() {
           <h1><Icon name="calendar" size={25} /> Appointments</h1>
           <p>Manage your upcoming visits and review past consultations and vitals.</p>
         </div>
-        <button className="primary-button" type="button" onClick={() => setShowModal(true)}>
-          <Icon name="plus" size={16} /> Schedule Appointment
-        </button>
       </section>
 
       {error && <section className="panel directory-error" style={{ marginTop: "20px" }}>{error}</section>}
 
-      {/* Tabs bar */}
       <div className="case-tabs-bar" style={{ marginTop: "24px" }}>
         <div className="case-tabs">
           <button
@@ -138,7 +125,7 @@ function PatientAppointmentsPage() {
               {timelineAppointments.map((appointment) => {
                 const date = new Date(appointment.appointment_date);
                 return (
-                  <li key={appointment.id}>
+                  <li key={appointment.id} onClick={() => handleOpenModal(appointment)} style={{ cursor: "pointer" }}>
                     <time>{date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</time>
                     <div><strong>{appointment.reason}</strong><span>{appointment.location || "Location to be confirmed"}</span></div>
                     <em>{appointment.status}</em>
@@ -150,7 +137,6 @@ function PatientAppointmentsPage() {
         </article>
       </section>
 
-      {/* Appointments List */}
       <section className="panel appointment-page-panel">
         <div className="appointment-page-list patient-scroll-list">
           {displayedAppointments.length === 0 ? (
@@ -164,11 +150,15 @@ function PatientAppointmentsPage() {
               const dayNum = aptDate.getDate();
               const timeStr = aptDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-              // Find vitals linked to this specific past appointment
               const matchedVitals = vitals.find((v) => v.appointment_id === apt.id);
 
               return (
-                <div className="appointment-row" key={apt.id}>
+                <div 
+                  className="appointment-row" 
+                  key={apt.id} 
+                  onClick={() => handleOpenModal(apt)}
+                  style={{ cursor: "pointer", transition: "background 0.2s" }}
+                >
                   <time>
                     {monthStr} {dayNum}
                     <span style={{ display: "block", fontSize: "10px", color: "#939bac" }}>{timeStr}</span>
@@ -178,13 +168,17 @@ function PatientAppointmentsPage() {
                     <h3>{apt.reason}</h3>
                     <p>{apt.location}</p>
 
-                    {/* Vitals breakdown for past appointments */}
                     {activeTab === "past" && matchedVitals && (
                       <div className="preview-label" style={{ marginTop: "10px", display: "flex", gap: "14px", flexWrap: "wrap", background: "#f8fafc", padding: "8px 12px", borderRadius: "6px" }}>
                         <span><strong>BP:</strong> {matchedVitals.blood_pressure}</span>
                         <span><strong>HR:</strong> {matchedVitals.heart_rate} bpm</span>
                         <span><strong>Wt:</strong> {matchedVitals.weight_lbs} lbs</span>
                         <span><strong>Glucose:</strong> {matchedVitals.blood_glucose_mg_dl} mg/dL</span>
+                        {matchedVitals.description && (
+                          <span style={{ width: "100%", color: "#475569", fontStyle: "italic", fontSize: "12px" }}>
+                            Description: {matchedVitals.description}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -199,53 +193,47 @@ function PatientAppointmentsPage() {
         <Pagination currentPage={appointmentPage} itemLabel={`${activeTab} appointments`} onPageChange={setAppointmentPage} onPageSizeChange={(size) => { setAppointmentsPerPage(size); setAppointmentPage(1); }} pageSize={appointmentsPerPage} totalItems={displayedAppointments.length} />
       </section>
 
-      {/* Schedule Modal / Form Section */}
-      {showModal && (
-        <div className="sidebar-backdrop" style={{ display: "grid", placeItems: "center", zIndex: 10 }}>
-          <section className="panel" style={{ width: "min(90%, 460px)", padding: "28px" }}>
-            <div className="panel__header">
-              <h2>Schedule New Appointment</h2>
-              <button className="more-button" type="button" onClick={() => setShowModal(false)}>✕</button>
+      {showDetailModal && selectedAppointment && (
+        <div className="modal-overlay" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
+          <div className="modal-content panel" style={{ background: "#fff", maxWidth: "600px", width: "100%", padding: "24px", borderRadius: "12px", boxShadow: "0 10px 25px rgba(0,0,0,0.1)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h2>Appointment Details</h2>
+              <button type="button" onClick={handleCloseModal} style={{ background: "none", border: "none", fontSize: "18px", cursor: "pointer" }}>✕</button>
             </div>
-            <form onSubmit={handleSchedule} className="scenario-form" style={{ marginTop: "20px" }}>
-              <label>
-                Reason for Visit
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g., Diabetes Follow-up"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                />
-              </label>
-              <label>
-                Date & Time
-                <input
-                  type="datetime-local"
-                  required
-                  value={appointmentDate}
-                  onChange={(e) => setAppointmentDate(e.target.value)}
-                />
-              </label>
-              <label>
-                Location / Room
-                <input
-                  type="text"
-                  required
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                />
-              </label>
-              <div className="form-actions" style={{ marginTop: "16px" }}>
-                <button className="secondary-button" type="button" onClick={() => setShowModal(false)}>
-                  Cancel
-                </button>
-                <button className="primary-button" type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? "Scheduling..." : "Confirm Appointment"}
-                </button>
-              </div>
-            </form>
-          </section>
+            
+            <div style={{ display: "grid", gap: "14px", fontSize: "14px" }}>
+              <div><strong>Reason / Consultation:</strong> {selectedAppointment.reason}</div>
+              <div><strong>Date & Time:</strong> {new Date(selectedAppointment.appointment_date).toLocaleString()}</div>
+              <div><strong>Location:</strong> {selectedAppointment.location || "Location to be confirmed"}</div>
+              <div><strong>Status:</strong> <span className={`status-badge status-badge--${selectedAppointment.status.toLowerCase()}`}>{selectedAppointment.status}</span></div>
+
+              <hr style={{ border: "0", borderTop: "1px solid #edf0f5", margin: "10px 0" }} />
+
+              <h3>Recorded Vitals</h3>
+              {selectedVitals ? (
+                <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "8px", display: "grid", gap: "8px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                    <div><strong>Blood Pressure:</strong> {selectedVitals.blood_pressure}</div>
+                    <div><strong>Heart Rate:</strong> {selectedVitals.heart_rate} bpm</div>
+                    <div><strong>Weight:</strong> {selectedVitals.weight_lbs} lbs</div>
+                    <div><strong>Blood Glucose:</strong> {selectedVitals.blood_glucose_mg_dl} mg/dL</div>
+                  </div>
+                  {selectedVitals.description && (
+                    <div style={{ marginTop: "6px", background: "#fff", padding: "10px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+                      <strong>Result Analysis & Recommendations:</strong>
+                      <p style={{ margin: "4px 0 0 0", color: "#334155" }}>{selectedVitals.description}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p style={{ color: "#64748b" }}>No vitals recorded for this session.</p>
+              )}
+            </div>
+
+            <div style={{ marginTop: "24px", display: "flex", justifyContent: "flex-end" }}>
+              <button type="button" className="roster-view-button roster-view-button--active" onClick={handleCloseModal}>Close</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

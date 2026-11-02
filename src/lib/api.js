@@ -853,3 +853,20 @@ export function updateClaimCodes(claimId, cptCode, icd10Code) {
     body: JSON.stringify({ cpt_code: cptCode, icd10_code: icd10Code }),
   });
 }
+
+export async function fetchPatientRecord() {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) throw new Error("No active session. Please sign in again.");
+
+  const response = await fetch("/api/patient/record", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(payload.message || "Unable to load patient records.");
+  }
+
+  return payload;
+}
+
