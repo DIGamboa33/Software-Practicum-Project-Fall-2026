@@ -4079,6 +4079,14 @@ td small {
 .chip-hidden { display: grid; gap: 6px; padding-top: 8px; border-top: 1px dashed #dce2ed; }
 .chip-hidden > span { color: #9ba5b5; font-size: 11px; }
 
+.chip-add__button {
+  display: grid; place-items: center; flex: none;
+  width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%;
+  font-size: 20px; line-height: 1; cursor: pointer;
+  background:#7de4cf;
+}
+.chip-add__button:hover { filter: brightness(.95); }
+
 .rubric-editor__row { 
   display: grid; 
   grid-template-columns: 1fr 80px 34px; gap: 8px; 

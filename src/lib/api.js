@@ -211,6 +211,18 @@ export function updateInstructorDueDate(classroomId, caseId, body) {
   });
 }
 
+export function fetchInstructorDrafts() {
+  return instructorRequest("/drafts");
+}
+
+export function saveInstructorDraft(draft) {
+  return instructorRequest("/drafts", { method: "POST", body: JSON.stringify(draft) });
+}
+
+export function deleteInstructorDraft(id) {
+  return instructorRequest(`/drafts/${id}`, { method: "DELETE" });
+}
+
 export function fetchInstructorAssignments(classroomId) {
   return instructorRequest(`/classrooms/${classroomId}/assignments`);
 }

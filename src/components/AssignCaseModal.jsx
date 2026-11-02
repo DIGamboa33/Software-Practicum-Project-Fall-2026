@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
   assignInstructorCase,
+  deleteInstructorDraft,
   fetchInstructorClassroom,
+  fetchInstructorDrafts,
   fetchInstructorPatientDetails,
   fetchInstructorPatients,
+  saveInstructorDraft,
 } from "../lib/api";
 import { NOTE_TYPES } from "../lib/noteTypes";
 
@@ -73,15 +76,15 @@ function Slot({ id, label, removed, onToggle, children }) {
   );
 }
 
-// A list of prefilled items (history, medications, allergies), each removable
+// a list of prefilled items (history, medications, allergies) removable
 const toItems = (texts) =>
   texts.map((text) => ({ id: crypto.randomUUID(), text, hidden: false }));
 
-// Only the items still shown are sent to the case
+// only the items still shown are sent to the case
 const visibleTexts = (items) =>
   items.filter((item) => !item.hidden).map((item) => item.text.trim()).filter(Boolean);
 
-// Prefilled items as pills. The x hides one, and hidden pills can be brought back.
+// prefilled items, the x hides one, and hidden pills can be brought back.
 function ChipSlot({ label, items, setItems, placeholder }) {
   const [draft, setDraft] = useState("");
   const shown = items.filter((item) => !item.hidden);
@@ -127,9 +130,7 @@ function ChipSlot({ label, items, setItems, placeholder }) {
           placeholder={placeholder}
           value={draft}
         />
-        <button className="text-button" onClick={addDraft} type="button">
-          + Add
-        </button>
+        <button aria-label={`Add ${label}`} className="chip-add__button" onClick={addDraft} type="button">+</button>
       </div>
 
       {hidden.length > 0 && (
@@ -176,6 +177,8 @@ function AssignCaseModal({ classrooms, initialDetail, onClose, onAssigned }) {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [draftId, setDraftId] = useState(null);
+  const [drafts, setDrafts] = useState([]);
 
   const students = detail?.students || [];
   const groups = detail?.groups || [];
@@ -207,6 +210,13 @@ function AssignCaseModal({ classrooms, initialDetail, onClose, onAssigned }) {
       current = false;
     };
   }, []);
+
+  // instructor's saved drafts, for the "Resume a draft" dropdown
+    useEffect(() => {
+    fetchInstructorDrafts()
+        .then((result) => setDrafts(result.drafts || []))
+        .catch(() => setDrafts([]));
+    }, []);
 
   // Load the students and groups of whichever class is selected
   useEffect(() => {
@@ -280,6 +290,48 @@ function AssignCaseModal({ classrooms, initialDetail, onClose, onAssigned }) {
     }
   }
 
+
+
+  async function saveDraft() {
+    try {
+        setError("");
+        const result = await saveInstructorDraft({
+        id: draftId,
+        classroomId,
+        title: form.title || form.patientName || "Untitled draft",
+        payload: {
+            form, removed, medications, allergies, history, criteria,
+            audience, groupId, individualIds, patientRecordId,
+        },
+        });
+        setDraftId(result.id);
+        setDrafts((await fetchInstructorDrafts()).drafts || []);
+    } catch (draftError) {
+        setError(draftError.message);
+    }
+    }
+
+    function loadDraft(draft) {
+        if (!draft) return;
+        const p = draft.payload;
+        setDraftId(draft.id);
+        // Only switch class if it differs. changeClassroom clears the loaded
+        // students, and the loading effect only reruns when the id changes.
+        if (draft.classroom_id && draft.classroom_id !== classroomId) {
+            changeClassroom(draft.classroom_id);
+        }
+        setForm(p.form);
+        setRemoved(p.removed);
+        setMedications(p.medications);
+        setAllergies(p.allergies);
+        setHistory(p.history);
+        setCriteria(p.criteria);
+        setAudience(p.audience);
+        setGroupId(p.groupId);
+        setIndividualIds(p.individualIds);
+        setPatientRecordId(p.patientRecordId);
+    }
+
   async function handleSubmit(event) {
     event.preventDefault();
 
@@ -318,6 +370,7 @@ function AssignCaseModal({ classrooms, initialDetail, onClose, onAssigned }) {
       });
       onAssigned(result, classroomId);
       dialogRef.current?.close();
+      if (draftId) deleteInstructorDraft(draftId).catch(() => {});
     } catch (assignError) {
       setError(assignError.message);
     } finally {
@@ -334,6 +387,20 @@ function AssignCaseModal({ classrooms, initialDetail, onClose, onAssigned }) {
         </header>
 
         <div className="assign-modal__body admin-form admin-form--one">
+           {drafts.length > 0 && (
+            <label>
+                Resume a draft
+                <select onChange={(e) => loadDraft(drafts.find((d) => d.id === e.target.value))} value="">
+                <option value="">Choose a draft</option>
+                {drafts.map((d) => (
+                    <option key={d.id} value={d.id}>
+                    {d.title} ({new Date(d.updated_at).toLocaleDateString()})
+                    </option>
+                ))}
+                </select>
+            </label>
+            )} 
+
           {/* 1. Class and students */}
           <section className="panel assign-modal__section">
             <h3>Class and students</h3>
@@ -569,6 +636,10 @@ function AssignCaseModal({ classrooms, initialDetail, onClose, onAssigned }) {
         </div>
 
         <footer className="admin-form__actions">
+            <button className="secondary-button" disabled={saving} onClick={saveDraft} type="button">
+                Save draft
+            </button>
+
           <button
             className="secondary-button"
             disabled={saving}

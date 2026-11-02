@@ -42,3 +42,14 @@ grant select, insert, update, delete on learning.case_expectations to service_ro
 grant select, insert, update, delete on learning.rubric_criteria to service_role;
 grant select, insert, update, delete on learning.review_scores to service_role;
 grant insert, update, delete on learning.cases to service_role;
+
+create table learning.assignment_drafts (
+  id uuid primary key default gen_random_uuid(),
+  instructor_id uuid not null references public.profiles(id) on delete cascade,
+  classroom_id uuid references school.classrooms(id) on delete set null,
+  title text,
+  payload jsonb not null,
+  updated_at timestamptz not null default now()
+);
+alter table learning.assignment_drafts enable row level security;
+grant select, insert, update, delete on learning.assignment_drafts to service_role;

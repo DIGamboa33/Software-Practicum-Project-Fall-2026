@@ -1408,5 +1408,77 @@ instructorRouter.get("/patients/:patientId", async (request, response) => {
   }
 });
 
+// ---- Assignment drafts (instructor-only) ----
+instructorRouter.get("/drafts", async (request, response) => {
+  try {
+    const context = await requireInstructor(request, response);
+    if (!context) return;
+    const { data, error } = await context.supabaseAdmin
+      .schema("learning")
+      .from("assignment_drafts")
+      .select("id, classroom_id, title, payload, updated_at")
+      .eq("instructor_id", context.profile.id)
+      .order("updated_at", { ascending: false });
+    if (error) throw error;
+    return response.json({ drafts: data || [] });
+  } catch (error) {
+    console.error("Unable to load drafts:", error.message || error);
+    return response.status(500).json({ message: "Unable to load drafts." });
+  }
+});
+
+instructorRouter.post("/drafts", async (request, response) => {
+  try {
+    const context = await requireInstructor(request, response);
+    if (!context) return;
+    const { supabaseAdmin: admin, profile } = context;
+    const { id, classroomId, title, payload } = request.body || {};
+
+    if (!payload || typeof payload !== "object" || JSON.stringify(payload).length > 60000) {
+      return response.status(400).json({ message: "Draft is empty or too large." });
+    }
+    // A draft may only point at a class this instructor teaches
+    if (classroomId && !(await verifyClassroomAccess(admin, profile, classroomId))) {
+      return response.status(404).json({ message: "Classroom not found." });
+    }
+
+    const row = {
+      instructor_id: profile.id,
+      classroom_id: classroomId || null,
+      title: cleanText(title, 120) || null,
+      payload,
+      updated_at: new Date().toISOString(),
+    };
+    const table = admin.schema("learning").from("assignment_drafts");
+    const query = id
+      ? table.update(row).eq("id", id).eq("instructor_id", profile.id)
+      : table.insert(row);
+    const { data, error } = await query.select("id").maybeSingle();
+    if (error) throw error;
+    if (!data) return response.status(404).json({ message: "Draft not found." });
+    return response.status(id ? 200 : 201).json({ id: data.id, message: "Draft saved." });
+  } catch (error) {
+    console.error("Unable to save draft:", error.message || error);
+    return response.status(500).json({ message: "Unable to save the draft." });
+  }
+});
+
+instructorRouter.delete("/drafts/:id", async (request, response) => {
+  try {
+    const context = await requireInstructor(request, response);
+    if (!context) return;
+    const { error } = await context.supabaseAdmin
+      .schema("learning")
+      .from("assignment_drafts")
+      .delete()
+      .eq("id", request.params.id)
+      .eq("instructor_id", context.profile.id);
+    if (error) throw error;
+    return response.json({ message: "Draft deleted." });
+  } catch (error) {
+    console.error("Unable to delete draft:", error.message || error);
+    return response.status(500).json({ message: "Unable to delete the draft." });
+  }
+});
 
 export default instructorRouter;
