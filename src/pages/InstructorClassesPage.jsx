@@ -5,13 +5,19 @@ import {
   fetchInstructorAssignments,
   fetchInstructorClassroom,
   fetchInstructorClassrooms,
+  enrollInstructorStudents,
 } from "../lib/api";
 import AssignCaseModal from "../components/AssignCaseModal";
+import Icon from "../components/Icon";
+import Pagination from "../components/Pagination";
 
 function InstructorClassesPage({ user }) {
   const [classrooms, setClassrooms] = useState([]);
   const [classroomId, setClassroomId] = useState("");
   const [classroomDetail, setClassroomDetail] = useState(null);
+  // Instructor student enrollment form.
+  const [isEnrollOpen, setIsEnrollOpen] = useState(false);
+  const [selectedEnrollIds, setSelectedEnrollIds] = useState([]);
   const [isGroupOpen, setIsGroupOpen] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [selectedGroupStudentIds, setSelectedGroupStudentIds] = useState([]);
@@ -23,6 +29,8 @@ function InstructorClassesPage({ user }) {
   const [notice, setNotice] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
+  const [rosterPage, setRosterPage] = useState(1);
+  const [rosterPerPage, setRosterPerPage] = useState(10);
 
   const [assignedCases, setAssignedCases] = useState([]);
 
@@ -93,6 +101,58 @@ async function loadAssignedCases(id) {
     isCurrent = false;
   };
   }, [classroomId]);
+
+
+  // Reset selections when changing classrooms.
+  useEffect(() => {
+    setIsEnrollOpen(false);
+    setSelectedEnrollIds([]);
+  }, [classroomId]);
+
+  // Select or deselect an eligible student.
+  function toggleEnrollment(studentId) {
+    setSelectedEnrollIds((current) =>
+      current.includes(studentId)
+        ? current.filter((id) => id !== studentId)
+        : [...current, studentId]
+    );
+  }
+
+  // Register the selected students in the classroom.
+  async function handleEnrollStudents(event) {
+    event.preventDefault();
+
+    if (!classroomId || !selectedEnrollIds.length) return;
+
+    setError("");
+    setNotice("");
+    setIsSaving(true);
+
+    try {
+      const result = await enrollInstructorStudents(
+        classroomId,
+        selectedEnrollIds
+      );
+
+      // Refresh the roster after enrollment.
+      const refreshed = await fetchInstructorClassroom(classroomId);
+
+      setClassroomDetail(refreshed);
+      setSelectedEnrollIds([]);
+      setIsEnrollOpen(false);
+      setNotice(result.message);
+
+    } catch (enrollmentError) {
+      setError(
+        enrollmentError instanceof Error
+          ? enrollmentError.message
+          : "Unable to enroll students."
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
 
   function toggleGroupStudent(studentId) {
     setSelectedGroupStudentIds((current) =>
@@ -165,13 +225,17 @@ async function loadAssignedCases(id) {
     ),
   );
   const selectedGroup = classroomDetail?.groups.find((group) => group.id === selectedGroupId);
+  const visibleRoster = (classroomDetail?.students || []).slice(
+    (rosterPage - 1) * rosterPerPage,
+    rosterPage * rosterPerPage,
+  );
 
   return (
     <div className="dashboard-page content-page instructor-workspace">
       <section className="page-heading">
         <div>
           <p className="section-label">Instructor workspace · classes</p>
-          <h1>Classes & case assignments</h1>
+          <h1><Icon name="calendar" size={25} /> Classes & case assignments</h1>
           <p>Review your assigned {user.subrole || "discipline"} classrooms, manage learning teams, and prepare students for scenarios.</p>
         </div>
         <span className="preview-label">Classrooms are created by administrators</span>
@@ -210,7 +274,7 @@ async function loadAssignedCases(id) {
             </div>
             <label>
               Switch classroom
-              <select onChange={(event) => setClassroomId(event.target.value)} value={classroomId}>
+              <select onChange={(event) => { setClassroomId(event.target.value); setRosterPage(1); }} value={classroomId}>
                 {classrooms.map((item) => <option key={item.id} value={item.id}>{item.short_name}</option>)}
               </select>
             </label>
@@ -222,12 +286,14 @@ async function loadAssignedCases(id) {
                 <div><p className="section-label">Roster · {classroom.discipline}</p><h2>Enrolled learners</h2></div>
                 <div className="panel__header-actions">
                   <span className="preview-label">{classroomDetail.students.length} active</span>
-                  <button className="secondary-button" disabled={!classroomDetail.students.length} onClick={() => setIsGroupOpen(true)} type="button">Create group</button>
+                  <button className="secondary-button" disabled={!classroomDetail.availableStudents.length} onClick={() => setIsEnrollOpen(true)} type="button"><Icon name="plus" size={15} /> Enroll learner</button>
+                  <button className="secondary-button" disabled={!classroomDetail.students.length} onClick={() => setIsGroupOpen(true)} type="button"><Icon name="plus" size={15} /> Create group</button>
                 </div>
               </div>
               {classroomDetail.students.length ? (
-                <div className="enrolled-student-list">
-                  {classroomDetail.students.map((student) => {
+                <>
+                  <div className="enrolled-student-list instructor-scroll-list">
+                  {visibleRoster.map((student) => {
                     const groupNames = classroomDetail.groups
                       .filter((group) => group.students.some((member) => member.id === student.id))
                       .map((group) => group.name);
@@ -240,7 +306,9 @@ async function loadAssignedCases(id) {
                       </div>
                     );
                   })}
-                </div>
+                  </div>
+                  <Pagination currentPage={rosterPage} itemLabel="enrolled learners" onPageChange={setRosterPage} onPageSizeChange={(size) => { setRosterPerPage(size); setRosterPage(1); }} pageSize={rosterPerPage} totalItems={classroomDetail.students.length} />
+                </>
               ) : <p className="directory-loading">No learners have been enrolled yet.</p>}
             </article>
             <article className="panel assignment-builder">
@@ -314,6 +382,73 @@ async function loadAssignedCases(id) {
               <p className="directory-loading">No cases have been assigned in this class yet.</p>
             )}
           </section>
+
+          {/* Derek: Instructor student enrollment form. */}
+          {isEnrollOpen && (
+            <section className="panel create-class-panel group-creation-panel">
+              <div className="panel__header">
+                <div>
+                  <p className="section-label">Student enrollment</p>
+                  <h2>Enroll eligible learners</h2>
+                </div>
+
+                <button
+                  className="row-action"
+                  aria-label="Close enrollment form"
+                  onClick={() => setIsEnrollOpen(false)}
+                  type="button"
+                >
+                  ×
+                </button>
+              </div>
+
+              <form
+                className="create-class-form"
+                onSubmit={handleEnrollStudents}
+              >
+                <div>
+                  <p className="create-class-form__hint">
+                    Select students whose primary discipline is accepted by
+                    this classroom.
+                  </p>
+
+                  <div className="eligible-learner-list">
+                    {classroomDetail.availableStudents.map((student) => (
+                      <label key={student.id}>
+                        <input
+                          type="checkbox"
+                          checked={selectedEnrollIds.includes(student.id)}
+                          onChange={() => toggleEnrollment(student.id)}
+                        />
+
+                        <span>{student.name}</span>
+                        <small>{student.subrole}</small>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="admin-form__actions">
+                  <button
+                    className="secondary-button"
+                    onClick={() => setIsEnrollOpen(false)}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    className="primary-button"
+                    disabled={isSaving || !selectedEnrollIds.length}
+                    type="submit"
+                  >
+                    {isSaving ? "Enrolling..." : "Enroll selected"}
+                  </button>
+                </div>
+              </form>
+            </section>
+          )}
+
 
           <section className="panel group-overview-panel">
             <div className="panel__header">

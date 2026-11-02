@@ -1,10 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import Icon from "../components/Icon";
+import Pagination from "../components/Pagination";
 import { fetchPatientCareTeam } from "../lib/api";
 
 function PatientCareTeamPage({ user }) {
   const [careTeam, setCareTeam] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [teamPage, setTeamPage] = useState(1);
+  const [teamPerPage, setTeamPerPage] = useState(6);
 
   useEffect(() => {
     let isCurrent = true;
@@ -31,6 +36,16 @@ function PatientCareTeamPage({ user }) {
     };
   }, []);
 
+  const disciplineData = useMemo(() => {
+    const totals = careTeam.reduce((counts, member) => {
+      const discipline = member.subrole?.name || "Care Provider";
+      counts[discipline] = (counts[discipline] || 0) + 1;
+      return counts;
+    }, {});
+    return Object.entries(totals).map(([name, members]) => ({ name, members }));
+  }, [careTeam]);
+  const visibleCareTeam = careTeam.slice((teamPage - 1) * teamPerPage, teamPage * teamPerPage);
+
   if (isLoading) {
     return (
       <div className="dashboard-page content-page">
@@ -52,7 +67,7 @@ function PatientCareTeamPage({ user }) {
       <section className="page-heading">
         <div>
           <p className="section-label">My health</p>
-          <h1>Care Team</h1>
+          <h1><Icon name="patients" size={25} /> Care Team</h1>
           <p>Physicians, nurses, and clinical staff assigned to your care.</p>
         </div>
       </section>
@@ -62,8 +77,13 @@ function PatientCareTeamPage({ user }) {
           <p className="empty-list-message">No care team members assigned yet.</p>
         </section>
       ) : (
-        <section className="team-grid" style={{ marginTop: "24px" }}>
-          {careTeam.map((member, index) => {
+        <>
+          <section className="panel patient-chart-card">
+            <div className="panel__header"><div><p className="section-label">Team composition</p><h2>Care disciplines</h2></div><Icon name="chart" size={19} /></div>
+            <div className="patient-chart-canvas patient-chart-canvas--bar"><ResponsiveContainer height="100%" width="100%"><BarChart data={disciplineData} layout="vertical" margin={{ left: 4, right: 8, top: 8 }}><CartesianGrid horizontal={false} stroke="#edf0f5" /><XAxis allowDecimals={false} type="number" /><YAxis dataKey="name" tick={{ fontSize: 12 }} type="category" width={100} /><Tooltip formatter={(value) => [`${value} team members`, "Assigned"]} /><Bar dataKey="members" fill="#45bca2" radius={[0, 6, 6, 0]} /></BarChart></ResponsiveContainer></div>
+          </section>
+          <section className="team-grid patient-scroll-grid" style={{ marginTop: "24px" }}>
+          {visibleCareTeam.map((member, index) => {
             const provider = member.provider || {};
             const firstName = provider.first_name || "Assigned";
             const lastName = provider.last_name || "Provider";
@@ -94,7 +114,9 @@ function PatientCareTeamPage({ user }) {
               </article>
             );
           })}
-        </section>
+          </section>
+          <Pagination currentPage={teamPage} itemLabel="care team members" onPageChange={setTeamPage} onPageSizeChange={(size) => { setTeamPerPage(size); setTeamPage(1); }} pageSize={teamPerPage} totalItems={careTeam.length} />
+        </>
       )}
     </div>
   );

@@ -7,6 +7,11 @@ function relationName(relation) {
   return Array.isArray(relation) ? relation[0]?.name : relation?.name;
 }
 
+function isDeactivatedAuthError(error) {
+  const details = `${error?.code || ""} ${error?.message || ""}`.toLowerCase();
+  return details.includes("banned") || details.includes("deactivated");
+}
+
 authRouter.post("/register", async (request, response) => {
   const firstName = String(request.body.firstName || "").trim();
   const lastName = String(request.body.lastName || "").trim();
@@ -84,6 +89,12 @@ authRouter.post("/login", async (request, response) => {
     email,
     password,
   });
+
+  if (isDeactivatedAuthError(authError)) {
+    return response.status(403).json({
+      message: "This account has been deactivated. Please contact an administrator to reactivate it.",
+    });
+  }
 
   if (authError || !authData.user) {
     return response.status(401).json({ message: "Invalid email or password." });

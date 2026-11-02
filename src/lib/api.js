@@ -132,6 +132,33 @@ export function fetchAdminAuditLog() {
   return adminRequest("/audit-log");
 }
 
+
+// Global Audit Log with search and filters
+export function fetchGlobalAuditLog(page = 1, filters = {}) {
+  const params = new URLSearchParams();
+
+  params.set("page", String(page));
+
+  if (filters.pageSize) {
+    params.set("pageSize", String(filters.pageSize));
+  }
+
+  if (filters.search) {
+    params.set("search", filters.search);
+  }
+
+  if (filters.role && filters.role !== "all") {
+    params.set("role", filters.role);
+  }
+
+  if (filters.action && filters.action !== "all") {
+    params.set("action", filters.action);
+  }
+
+  return adminRequest(`/global-audit-log?${params.toString()}`);
+}
+
+
 export function fetchAdminAcademics() {
   return adminRequest("/academics");
 }
@@ -141,6 +168,20 @@ export function createAdminClassroom(classroom) {
     method: "POST",
     body: JSON.stringify(classroom),
   });
+}
+
+// Update accepted disciplines for an existing classroom.
+export function updateAdminClassroomDisciplines(
+  classroomId,
+  additionalSubroleIds
+) {
+  return adminRequest(
+    `/academics/classrooms/${classroomId}/allowed-disciplines`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ additionalSubroleIds })
+    }
+  );
 }
 
 export function assignAdminClassroomInstructor(classroomId, instructorId) {
@@ -154,6 +195,13 @@ export function bulkInviteStudents(students) {
   return adminRequest("/students/bulk-invite", {
     method: "POST",
     body: JSON.stringify({ students }),
+  });
+}
+
+export function bulkCreatePatients(patients) {
+  return adminRequest("/patients/bulk-create", {
+    method: "POST",
+    body: JSON.stringify({ patients }),
   });
 }
 
@@ -181,6 +229,17 @@ export function fetchInstructorClassroom(classroomId) {
 
 export function fetchEligibleInstructorStudents() {
   return instructorRequest("/eligible-students");
+}
+
+// Register eligible students in an existing classroom.
+export function enrollInstructorStudents(classroomId, studentIds) {
+  return instructorRequest(
+    `/classrooms/${classroomId}/enrollments`,
+    {
+      method: "POST",
+      body: JSON.stringify({ studentIds })
+    }
+  );
 }
 
 export function createInstructorClassroomGroup(classroomId, group) {
@@ -521,7 +580,7 @@ export async function updateStudentCaseStatus(
   if (!response.ok) {
     throw new Error(
       payload.message ||
-        "Unable to update encounter status.",
+      "Unable to update encounter status.",
     );
   }
 
@@ -649,19 +708,19 @@ export async function fetchPatientDashboard() {
   }
 
   const response = await fetch("/api/patient/dashboard", {
-    headers: {Authorization: `Bearer ${accessToken}`},
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
 
   const payload = await response.json();
-  
-  
 
-  if(!response.ok){
+
+
+  if (!response.ok) {
     throw new Error(payload.message || "Unable to load your patient health dashboard");
 
   }
   return payload;
-  
+
 }
 
 export async function fetchPatientCareTeam() {
@@ -734,15 +793,110 @@ export function fetchInstructorPatients() {
   return instructorRequest("/patients");
 }
 
-export function createInstructorPatient(patientData) {
-  return instructorRequest("/patients", {
-    method: "POST",
-    body: JSON.stringify(patientData),
-  });
-}
-
 export function fetchInstructorPatientDetails(patientId) {
   return instructorRequest(
     `/patients/${encodeURIComponent(patientId)}`
   );
 }
+
+async function authenticatedRequest(path, options = {}) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+
+  if (!accessToken) {
+    throw new Error("No active session. Please sign in again.");
+  }
+
+  const response = await fetch(path, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...options.headers,
+    },
+  });
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(payload.message || "Unable to complete this request.");
+  }
+
+  return payload;
+}
+
+export function fetchFrontDeskDashboard() {
+  return authenticatedRequest("/api/front-desk/dashboard");
+}
+
+export function updateFrontDeskAppointmentStatus(appointmentId, status) {
+  return authenticatedRequest(`/api/front-desk/appointments/${encodeURIComponent(appointmentId)}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+}
+
+export function createFrontDeskAppointment(appointment) {
+  return authenticatedRequest("/api/front-desk/appointments", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(appointment),
+  });
+}
+
+export function confirmFrontDeskIntake(intake) {
+  return authenticatedRequest("/api/front-desk/intakes/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(intake),
+  });
+}
+
+export function fetchFrontDeskPatientReferrals(patientId) {
+  return authenticatedRequest(
+    `/api/front-desk/patients/${encodeURIComponent(patientId)}/referrals`,
+  );
+}
+
+export function updateFrontDeskReferralAppointment(referralId, appointmentId) {
+  return authenticatedRequest(`/api/front-desk/referrals/${encodeURIComponent(referralId)}/schedule`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ appointment_id: appointmentId }),
+  });
+}
+
+export function fetchBillingDashboard() {
+  return authenticatedRequest("/api/billing/dashboard");
+}
+
+export function updateClaimStatus(claimId, status) {
+  return authenticatedRequest(`/api/billing/claims/${encodeURIComponent(claimId)}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+}
+
+export function updateClaimCodes(claimId, cptCode, icd10Code) {
+  return authenticatedRequest(`/api/billing/claims/${encodeURIComponent(claimId)}/codes`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cpt_code: cptCode, icd10_code: icd10Code }),
+  });
+}
+
+export async function fetchPatientRecord() {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) throw new Error("No active session. Please sign in again.");
+
+  const response = await fetch("/api/patient/record", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(payload.message || "Unable to load patient records.");
+  }
+
+  return payload;
+}
+

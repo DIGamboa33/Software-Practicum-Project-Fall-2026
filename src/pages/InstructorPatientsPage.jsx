@@ -1,19 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
-  createInstructorPatient,
   fetchInstructorPatients,
   fetchInstructorPatientDetails,
 } from "../lib/api";
-
-const initialForm = {
-  firstName: "",
-  lastName: "",
-  dateOfBirth: "",
-  sex: "",
-  phone: "",
-  address: "",
-};
+import Icon from "../components/Icon";
+import Pagination from "../components/Pagination";
 
 function calculateAge(dateOfBirth) {
   if (!dateOfBirth) return "—";
@@ -79,7 +71,7 @@ function PatientSection({
       {rows.length === 0 ? (
         <p>{emptyMessage}</p>
       ) : (
-        <div className="table-wrap">
+        <div className="table-wrap admin-scroll-table">
           <table>
             <thead>
               <tr>
@@ -114,13 +106,6 @@ function PatientSection({
 export default function InstructorPatientsPage() {
   const [patients, setPatients] = useState([]);
 
-  const [search, setSearch] = useState("");
-
-  const [showCreateForm, setShowCreateForm] =
-    useState(false);
-
-  const [form, setForm] = useState(initialForm);
-
   const [selectedPatient, setSelectedPatient] =
     useState(null);
 
@@ -129,11 +114,9 @@ export default function InstructorPatientsPage() {
   const [detailsLoading, setDetailsLoading] =
     useState(false);
 
-  const [saving, setSaving] = useState(false);
-
   const [error, setError] = useState("");
-
-  const [success, setSuccess] = useState("");
+  const [patientPage, setPatientPage] = useState(1);
+  const [patientsPerPage, setPatientsPerPage] = useState(10);
 
   async function loadPatients() {
     try {
@@ -157,88 +140,12 @@ export default function InstructorPatientsPage() {
   }, []);
 
 
-  const filteredPatients = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    if (!query) return patients;
-
-    return patients.filter((patient) =>
-      [
-        patient.name,
-        patient.careflowId,
-        patient.id,
-        patient.sex,
-      ].some((value) =>
-        String(value || "")
-          .toLowerCase()
-          .includes(query)
-      )
-    );
-  }, [patients, search]);
-
-
-  function updateForm(event) {
-    const { name, value } = event.target;
-
-    setForm((current) => ({
-      ...current,
-      [name]: value,
-    }));
-  }
-
-  function openCreateForm() {
-    setSelectedPatient(null);
-
-    setForm(initialForm);
-
-    setError("");
-    setSuccess("");
-
-    setShowCreateForm(true);
-  }
-
-  function closeCreateForm() {
-    setShowCreateForm(false);
-
-    setForm(initialForm);
-  }
-
-  async function handleCreatePatient(event) {
-    event.preventDefault();
-
-    setSaving(true);
-    setError("");
-    setSuccess("");
-
-    try {
-      const response =
-        await createInstructorPatient(form);
-
-      closeCreateForm();
-
-      await loadPatients();
-
-      setSuccess(
-        response.message ||
-          "Patient created successfully."
-      );
-    } catch (err) {
-      setError(
-        err.message || "Unable to create patient."
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function handleViewPatient(patientId) {
     try {
       setDetailsLoading(true);
 
       setError("");
-      setSuccess("");
 
-      setShowCreateForm(false);
 
       setSelectedPatient(null);
 
@@ -260,6 +167,11 @@ export default function InstructorPatientsPage() {
     setSelectedPatient(null);
   }
 
+  const visiblePatients = patients.slice(
+    (patientPage - 1) * patientsPerPage,
+    patientPage * patientsPerPage,
+  );
+
 
 
   return (
@@ -273,7 +185,7 @@ export default function InstructorPatientsPage() {
             Patient Management
           </p>
 
-          <h1>Patients</h1>
+          <h1><Icon name="patients" size={25} /> Patients</h1>
 
           <p>
             View existing patient records and manage
@@ -281,15 +193,6 @@ export default function InstructorPatientsPage() {
           </p>
         </div>
 
-        {!showCreateForm && (
-          <button
-            type="button"
-            className="primary-button"
-            onClick={openCreateForm}
-          >
-            + Create New Patient
-          </button>
-        )}
       </section>
 
       {/* MESSAGES */}
@@ -304,166 +207,6 @@ export default function InstructorPatientsPage() {
         </p>
       )}
 
-      {success && (
-        <p
-          role="status"
-          style={{
-            marginBottom: "16px",
-            color: "#15803d",
-          }}
-        >
-          {success}
-        </p>
-      )}
-
-      {/* CREATE NEW PATIENT */}
-
-      {showCreateForm && (
-        <section className="panel data-panel">
-          <div style={{ padding: "24px" }}>
-
-            <h2>Create New Patient</h2>
-
-            <p>
-              Enter the patient's demographic
-              information.
-            </p>
-
-            <form onSubmit={handleCreatePatient}>
-
-              <div className="register-form__grid">
-
-                <label>
-                  First Name
-
-                  <input
-                    name="firstName"
-                    value={form.firstName}
-                    onChange={updateForm}
-                    required
-                    maxLength={100}
-                  />
-                </label>
-
-                <label>
-                  Last Name
-
-                  <input
-                    name="lastName"
-                    value={form.lastName}
-                    onChange={updateForm}
-                    required
-                    maxLength={100}
-                  />
-                </label>
-
-              </div>
-
-              <div className="register-form__grid">
-
-                <label>
-                  Date of Birth
-
-                  <input
-                    type="date"
-                    name="dateOfBirth"
-                    value={form.dateOfBirth}
-                    max={new Date()
-                      .toISOString()
-                      .slice(0, 10)}
-                    onChange={updateForm}
-                    required
-                  />
-                </label>
-
-                <label>
-                  Sex
-
-                  <select
-                    name="sex"
-                    value={form.sex}
-                    onChange={updateForm}
-                    required
-                  >
-                    <option value="">
-                      Select sex
-                    </option>
-
-                    <option value="Female">
-                      Female
-                    </option>
-
-                    <option value="Male">
-                      Male
-                    </option>
-
-                    <option value="Other">
-                      Other
-                    </option>
-                  </select>
-                </label>
-
-              </div>
-
-              <div className="register-form__grid">
-
-                <label>
-                  Phone (Optional)
-
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={form.phone}
-                    onChange={updateForm}
-                    maxLength={30}
-                  />
-                </label>
-
-                <label>
-                  Address (Optional)
-
-                  <input
-                    name="address"
-                    value={form.address}
-                    onChange={updateForm}
-                    maxLength={300}
-                  />
-                </label>
-
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  gap: "12px",
-                  marginTop: "20px",
-                }}
-              >
-                <button
-                  className="primary-button"
-                  type="submit"
-                  disabled={saving}
-                >
-                  {saving
-                    ? "Saving..."
-                    : "Save Patient"}
-                </button>
-
-                <button
-                  className="outline-button"
-                  type="button"
-                  onClick={closeCreateForm}
-                  disabled={saving}
-                >
-                  Cancel
-                </button>
-              </div>
-
-            </form>
-          </div>
-        </section>
-      )}
-
       {/* PATIENT DIRECTORY */}
 
       <section className="panel data-panel">
@@ -471,22 +214,11 @@ export default function InstructorPatientsPage() {
         <div className="data-panel__toolbar">
 
           <strong>
-            {filteredPatients.length}{" "}
-            {filteredPatients.length === 1
+            {patients.length}{" "}
+            {patients.length === 1
               ? "patient"
               : "patients"}
           </strong>
-
-          <label className="table-search">
-            <input
-              type="search"
-              placeholder="Search patients..."
-              value={search}
-              onChange={(event) =>
-                setSearch(event.target.value)
-              }
-            />
-          </label>
 
         </div>
 
@@ -504,21 +236,37 @@ export default function InstructorPatientsPage() {
                   <th>Careflow ID</th>
                   <th>Age</th>
                   <th>Sex</th>
-                  <th>Actions</th>
+                  <th />
                 </tr>
               </thead>
 
               <tbody>
 
-                {filteredPatients.length === 0 ? (
+                {patients.length === 0 ? (
                   <tr>
                     <td colSpan={5}>
                       No patients found.
                     </td>
                   </tr>
                 ) : (
-                  filteredPatients.map((patient) => (
-                    <tr key={patient.id}>
+                  visiblePatients.map((patient) => (
+                    <tr
+                      key={patient.id}
+                      role="button"
+                      tabIndex={detailsLoading ? -1 : 0}
+                      aria-label={`View details for ${patient.name || "patient"}`}
+                      aria-disabled={detailsLoading}
+                      onClick={() => {
+                        if (!detailsLoading) handleViewPatient(patient.id);
+                      }}
+                      onKeyDown={(event) => {
+                        if (!detailsLoading && (event.key === "Enter" || event.key === " ")) {
+                          event.preventDefault();
+                          handleViewPatient(patient.id);
+                        }
+                      }}
+                      style={{ cursor: detailsLoading ? "wait" : "pointer" }}
+                    >
 
                       <td>
                         <strong>
@@ -540,17 +288,17 @@ export default function InstructorPatientsPage() {
                       <td>
                         {patient.sex || "—"}
                       </td>
-
                       <td>
                         <button
                           className="row-action"
-                          type="button"
-                          onClick={() =>
-                            handleViewPatient(patient.id)
-                          }
                           disabled={detailsLoading}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleViewPatient(patient.id);
+                          }}
+                          type="button"
                         >
-                          View Details
+                          Details
                         </button>
                       </td>
 
@@ -563,6 +311,7 @@ export default function InstructorPatientsPage() {
 
           </div>
         )}
+        {!loading && patients.length > 0 && <Pagination currentPage={patientPage} itemLabel="patients" onPageChange={setPatientPage} onPageSizeChange={(size) => { setPatientsPerPage(size); setPatientPage(1); }} pageSize={patientsPerPage} totalItems={patients.length} />}
       </section>
 
       {/* LOADING DETAILS */}

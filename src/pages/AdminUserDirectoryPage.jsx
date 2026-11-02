@@ -1,4 +1,13 @@
 import { useEffect, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import Icon from "../components/Icon";
 import Pagination from "../components/Pagination";
 import {
@@ -28,6 +37,7 @@ function AdminUserDirectoryPage() {
   const [error, setError] = useState("");
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [userPage, setUserPage] = useState(1);
+  const [usersPerPage, setUsersPerPage] = useState(10);
   const [accessOptions, setAccessOptions] = useState({ roles: [], subroles: [] });
   const [auditEntries, setAuditEntries] = useState([]);
   const [managementError, setManagementError] = useState("");
@@ -103,11 +113,6 @@ function AdminUserDirectoryPage() {
   }, []);
 
   const selectedUser = directory.users.find((user) => user.id === selectedUserId) || null;
-  const largestRoleCount = Math.max(
-    ...(directory.stats?.roleBreakdown || []).map((role) => role.count),
-    1,
-  );
-
   const selectedRole = accessOptions.roles.find((role) => role.name === selectedUser?.role);
   const selectedSubrole = accessOptions.subroles.find(
     (subrole) => subrole.name === selectedUser?.subrole,
@@ -127,7 +132,6 @@ function AdminUserDirectoryPage() {
     setUserPage(1);
   }
 
-  const usersPerPage = 10;
   const visibleUsers = directory.users.slice(
     (userPage - 1) * usersPerPage,
     userPage * usersPerPage,
@@ -374,7 +378,7 @@ function AdminUserDirectoryPage() {
                           onClick={() => setSelectedUserId(user.id)}
                           type="button"
                         >
-                          <Icon name="arrow" size={16} />
+                          Details
                         </button>
                       </td>
                     </tr>
@@ -386,6 +390,10 @@ function AdminUserDirectoryPage() {
                 currentPage={userPage}
                 itemLabel="accounts"
                 onPageChange={setUserPage}
+                onPageSizeChange={(nextPageSize) => {
+                  setUsersPerPage(nextPageSize);
+                  setUserPage(1);
+                }}
                 pageSize={usersPerPage}
                 totalItems={directory.users.length}
               />
@@ -397,15 +405,25 @@ function AdminUserDirectoryPage() {
           <article className="panel role-chart">
             <p className="section-label">Role distribution</p>
             <h2>Account mix</h2>
-            {(directory.stats?.roleBreakdown || []).map((role) => (
-              <div className="role-chart__row" key={role.name}>
-                <span>{role.name}</span>
-                <i>
-                  <b style={{ width: `${(role.count / largestRoleCount) * 100}%` }} />
-                </i>
-                <strong>{role.count}</strong>
+            {(directory.stats?.roleBreakdown || []).length ? (
+              <div className="admin-visual-canvas admin-visual-canvas--compact">
+                <ResponsiveContainer height="100%" width="100%">
+                  <BarChart
+                    data={directory.stats.roleBreakdown}
+                    layout="vertical"
+                    margin={{ left: -16, right: 12, top: 8, bottom: 2 }}
+                  >
+                    <CartesianGrid horizontal={false} stroke="#edf0f5" />
+                    <XAxis allowDecimals={false} type="number" />
+                    <YAxis dataKey="name" tick={{ fontSize: 12 }} type="category" width={74} />
+                    <Tooltip formatter={(value) => [`${value} accounts`, "Users"]} />
+                    <Bar dataKey="count" fill="#6277d8" radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
-            ))}
+            ) : (
+              <p className="directory-loading">Role distribution will appear once accounts are created.</p>
+            )}
           </article>
 
           <article className="panel audit-log">

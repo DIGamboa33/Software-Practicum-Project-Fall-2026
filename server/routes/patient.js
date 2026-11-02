@@ -193,34 +193,114 @@ patientRouter.post("/appointments", async (request, response) => {
     }
 });
 
+
 patientRouter.patch("/referrals/:id/schedule", async (request, response) => {
+  try {
+    const context = await requirePatient(request, response);
+    if (!context) return;
+
+    const { supabaseAdmin, user } = context;
+    const { id } = request.params;
+    const { appointmentId } = request.body || {};
+
+    if (!appointmentId) {
+      return response.status(400).json({
+        message: "An appointment is required.",
+      });
+    }
+
+    // Verify the appointment belongs to the logged-in patient.
+    const { data: appointment, error: appointmentError } =
+      await supabaseAdmin
+        .schema("patient_portal")
+        .from("appointments")
+        .select("id")
+        .eq("id", appointmentId)
+        .eq("patient_id", user.id)
+        .maybeSingle();
+
+    if (appointmentError) throw appointmentError;
+
+    if (!appointment) {
+      return response.status(404).json({
+        message: "Appointment not found.",
+      });
+    }
+
+    // Update only a referral owned by this patient.
+    const { data, error } = await supabaseAdmin
+      .schema("patient_portal")
+      .from("referrals")
+      .update({
+        status: "Approved",
+        linked_appointment_id: appointmentId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .eq("patient_id", user.id)
+      .select()
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!data) {
+      return response.status(404).json({
+        message: "Referral not found.",
+      });
+    }
+
+    return response.json(data);
+  } catch (error) {
+    console.error("Unable to update referral:", error);
+    return response.status(500).json({
+      message: "Unable to update referral.",
+    });
+  }
+});
+
+
+patientRouter.get("/vitals", async (request, response) => {
     try {
         const context = await requirePatient(request, response);
         if (!context) return;
-        const { supabaseAdmin } = context;
-        const { referralId } = request.params;
-        const { appointmentId } = request.body;
+        const { supabaseAdmin, user } = context;
 
         const { data, error } = await supabaseAdmin
             .schema('patient_portal')
-            .from('referrals')
-            .update({
-                status: 'Approved',
-                linked_appointment_id: appointmentId,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', referralId)
-            .select()
-            .single();
+            .from('vitals')
+            .select('*')
+            .eq('patient_id', user.id)
+            .order('recorded_date', { ascending: false });
 
         if (error) throw error;
-        return response.json(data);
+        return response.json(data || []);
     } catch (error) {
-        console.error("Error updating referral status:", error);
-        return response.status(500).json({ message: "Unable to update referral." });
+        console.error("Error fetching vitals:", error);
+        return response.status(500).json({ message: "Unable to load vitals." });
+    }
+});
+// Fetch patient demographic record from the public schema
+patientRouter.get("/record", async (request, response) => {
+    try {
+        const context = await requirePatient(request, response);
+        if (!context) return;
+        const { supabaseAdmin, user } = context;
+
+        const { data, error } = await supabaseAdmin
+            .from('patient_records')
+            .select('*')
+            .eq('profile_id', user.id)
+            .single();
+
+        if (error && error.code !== 'PGRST116') throw error;
+        return response.json(data || null);
+    } catch (error) {
+        console.error("Error fetching patient record:", error);
+        return response.status(500).json({ message: "Unable to load patient record." });
     }
 });
 
+// Fetch patient vitals from the patient_portal schema
 patientRouter.get("/vitals", async (request, response) => {
     try {
         const context = await requirePatient(request, response);

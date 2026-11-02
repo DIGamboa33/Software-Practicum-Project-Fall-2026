@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { randomBytes, randomInt } from "node:crypto";
 import { getSupabaseAdmin, supabase } from "../services/supabase.js";
+import { writeAuditLog } from "../services/auditLog.js";
 
 const adminRouter = Router();
 
@@ -67,15 +68,7 @@ function generateTemporaryPassword() {
   return `Cf!${randomBytes(18).toString("base64url")}9a`;
 }
 
-async function writeAuditLog(supabaseAdmin, entry) {
-  const { error } = await supabaseAdmin.from("admin_audit_log").insert(entry);
-  if (error) {
-    console.error("Unable to write admin audit log:", error.message);
-    throw new Error(
-      "Account management is not ready yet. Run the admin audit-log SQL setup first.",
-    );
-  }
-}
+
 
 async function ensureAuditLogReady(supabaseAdmin, response) {
   const { error } = await supabaseAdmin.from("admin_audit_log").select("id").limit(1);
@@ -163,16 +156,16 @@ adminRouter.get("/users", async (request, response) => {
     const search = String(request.query.query || "").trim().toLowerCase();
     const users = search
       ? directory.filter((user) =>
-          [
-            user.name,
-            user.email,
-            user.role,
-            user.subrole,
-            user.utepId,
-            user.careflowId,
-            user.id,
-          ].some((value) => String(value || "").toLowerCase().includes(search)),
-        )
+        [
+          user.name,
+          user.email,
+          user.role,
+          user.subrole,
+          user.utepId,
+          user.careflowId,
+          user.id,
+        ].some((value) => String(value || "").toLowerCase().includes(search)),
+      )
       : directory;
 
     return response.json({ users, stats: buildStats(directory) });
@@ -418,6 +411,14 @@ adminRouter.get("/academics", async (request, response) => {
       supabaseAdmin.from("subroles").select("id, name").order("name"),
     ]);
     if (classroomError || membershipError || enrollmentError || profileError || subroleError) throw classroomError || membershipError || enrollmentError || profileError || subroleError;
+    // Get the accepted disciplines for all classrooms
+    const { data: allowedRows, error: allowedError } = await school
+      .from("classroom_allowed_subroles")
+      .select("classroom_id, subrole_id");
+
+    if (allowedError) {
+      throw allowedError;
+    }
     const profileById = new Map((profiles || []).map((profile) => [profile.id, profile]));
     const instructorsByClass = new Map();
     (memberships || []).forEach((membership) => {
@@ -427,10 +428,23 @@ adminRouter.get("/academics", async (request, response) => {
       instructorsByClass.set(membership.classroom_id, current);
     });
     const enrollmentCounts = (enrollments || []).reduce((counts, row) => ({ ...counts, [row.classroom_id]: (counts[row.classroom_id] || 0) + 1 }), {});
+    const studentsByClass = new Map();
+    (enrollments || []).forEach((enrollment) => {
+      const profile = profileById.get(enrollment.student_id);
+      if (!profile || getRelationName(profile.roles) !== "Student") return;
+      const current = studentsByClass.get(enrollment.classroom_id) || [];
+      current.push({
+        id: profile.id,
+        name: `${profile.first_name} ${profile.last_name}`.trim(),
+        subrole: getRelationName(profile.subroles),
+        utepId: profile.utep_id || null,
+      });
+      studentsByClass.set(enrollment.classroom_id, current);
+    });
     const subroleById = new Map((subroles || []).map((subrole) => [subrole.id, subrole.name]));
     return response.json({
       semesters: [...new Set((classrooms || []).map((classroom) => classroom.term))],
-      classrooms: (classrooms || []).map((classroom) => ({ ...classroom, discipline: subroleById.get(classroom.discipline_subrole_id) || "Unassigned", instructors: instructorsByClass.get(classroom.id) || [], studentCount: enrollmentCounts[classroom.id] || 0 })),
+      classrooms: (classrooms || []).map((classroom) => ({ ...classroom, discipline: subroleById.get(classroom.discipline_subrole_id) || "Unassigned", instructors: instructorsByClass.get(classroom.id) || [], students: studentsByClass.get(classroom.id) || [], studentCount: enrollmentCounts[classroom.id] || 0, allowedSubroleIds: (allowedRows || []).filter((row) => row.classroom_id === classroom.id).map((row) => row.subrole_id) })),
       students: (profiles || []).filter((profile) => getRelationName(profile.roles) === "Student").map((profile) => ({ id: profile.id, name: `${profile.first_name} ${profile.last_name}`.trim(), subrole: getRelationName(profile.subroles), utepId: profile.utep_id || null })),
       instructors: (profiles || []).filter((profile) => getRelationName(profile.roles) === "Instructor").map((profile) => ({ id: profile.id, name: `${profile.first_name} ${profile.last_name}`.trim(), subroleId: profile.sub_role_id, subrole: getRelationName(profile.subroles) })),
       subroles: subroles || [],
@@ -449,6 +463,33 @@ adminRouter.post("/academics/classrooms", async (request, response) => {
   const term = String(request.body.term || "").trim();
   const disciplineSubroleId = Number(request.body.disciplineSubroleId);
   const instructorId = String(request.body.instructorId || "").trim();
+  // Derek additional accepted disciplines.
+  const additionalInput = request.body.additionalSubroleIds;
+
+  if (
+    additionalInput !== undefined &&
+    !Array.isArray(additionalInput)
+  ) {
+    return response.status(400).json({
+      message: "Additional disciplines must be a list."
+    });
+  }
+
+  const additionalSubroleIds =
+    (additionalInput || []).map(Number);
+
+  // Only accept valid positive numeric IDs.
+  if (
+    additionalSubroleIds.length > 30 ||
+    additionalSubroleIds.some(
+      (id) => !Number.isSafeInteger(id) || id <= 0
+    )
+  ) {
+    return response.status(400).json({
+      message: "Invalid additional disciplines."
+    });
+  }
+
 
   if (!crn || !fullName || !shortName || !term || !disciplineSubroleId) {
     return response.status(400).json({ message: "CRN, class names, term, and discipline are required." });
@@ -468,6 +509,34 @@ adminRouter.post("/academics/classrooms", async (request, response) => {
     if (disciplineError || !discipline) {
       return response.status(400).json({ message: "Choose a valid discipline." });
     }
+
+
+    // Combine the primary discipline with the additional ones.
+    // Set prevents duplicate IDs.
+    const allowedIds = [
+      ...new Set([
+        disciplineSubroleId,
+        ...additionalSubroleIds
+      ])
+    ];
+
+    // Verify that every selected discipline exists.
+    const { data: validSubroles, error: subrolesError } =
+      await supabaseAdmin
+        .from("subroles")
+        .select("id")
+        .in("id", allowedIds);
+
+    if (subrolesError) {
+      throw subrolesError;
+    }
+
+    if ((validSubroles || []).length !== allowedIds.length) {
+      return response.status(400).json({
+        message: "One or more selected disciplines are invalid."
+      });
+    }
+
 
     if (instructorId) {
       const { data: instructor, error: instructorError } = await supabaseAdmin
@@ -490,13 +559,60 @@ adminRouter.post("/academics/classrooms", async (request, response) => {
       throw classroomError;
     }
 
+
+    // Derek cross-discipline enrollment change.
+    // Automatically allow the classroom's primary discipline.
+    // Save every accepted discipline for this classroom.
+    const disciplineRows = allowedIds.map((id) => ({
+      classroom_id: classroom.id,
+      subrole_id: id
+    }));
+
+    const { error: allowedDisciplineError } = await school
+      .from("classroom_allowed_subroles")
+      .insert(disciplineRows);
+
+
+    // If the discipline cannot be saved, undo the new classroom.
+    if (allowedDisciplineError) {
+      console.error(
+        "Unable to save classroom discipline:",
+        allowedDisciplineError
+      );
+
+      const { error: cleanupError } = await school
+        .from("classrooms")
+        .delete()
+        .eq("id", classroom.id);
+
+      if (cleanupError) {
+        console.error("Unable to undo classroom creation:", cleanupError);
+      }
+
+      return response.status(500).json({
+        message: "Unable to save the classroom's accepted discipline."
+      });
+    }
+
+
     if (instructorId) {
       const { error: membershipError } = await school.from("classroom_instructors").insert({
         classroom_id: classroom.id,
         instructor_id: instructorId,
         access_level: "owner",
       });
-      if (membershipError) throw membershipError;
+      if (membershipError) {
+        const { error: cleanupError } = await school
+          .from("classrooms")
+          .delete()
+          .eq("id", classroom.id);
+
+        if (cleanupError) {
+          console.error("Classroom cleanup failed:", cleanupError);
+        }
+
+        throw membershipError;
+      }
     }
 
     await writeAuditLog(supabaseAdmin, {
@@ -510,6 +626,194 @@ adminRouter.post("/academics/classrooms", async (request, response) => {
     return response.status(500).json({ message: error.message || "Unable to create classroom." });
   }
 });
+
+
+// Derek: Edit accepted disciplines for an existing classroom.
+adminRouter.patch(
+  "/academics/classrooms/:classroomId/allowed-disciplines",
+  async (request, response) => {
+
+    const input = request.body.additionalSubroleIds;
+
+    // Make sure the Admin sent an array.
+    if (!Array.isArray(input) || input.length > 30) {
+      return response.status(400).json({
+        message: "Provide a list of additional disciplines."
+      });
+    }
+
+    const additionalIds = input.map(Number);
+
+    // Validate the numeric IDs.
+    if (additionalIds.some(
+      (id) => !Number.isSafeInteger(id) || id <= 0
+    )) {
+      return response.status(400).json({
+        message: "Invalid discipline IDs."
+      });
+    }
+
+    try {
+      const context = await requireAdmin(request, response);
+      if (!context) return;
+
+      const { supabaseAdmin, actor } = context;
+
+      if (!(await ensureAuditLogReady(supabaseAdmin, response))) {
+        return;
+      }
+
+      const school = supabaseAdmin.schema("school");
+
+      // Step 1: Find the classroom.
+      const { data: classroom, error: classroomError } =
+        await school
+          .from("classrooms")
+          .select("id, short_name, discipline_subrole_id")
+          .eq("id", request.params.classroomId)
+          .maybeSingle();
+
+      if (classroomError) throw classroomError;
+
+      if (!classroom) {
+        return response.status(404).json({
+          message: "Classroom not found."
+        });
+      }
+
+      // Step 2: Always include the primary discipline.
+      const allowedIds = [
+        ...new Set([
+          classroom.discipline_subrole_id,
+          ...additionalIds
+        ])
+      ];
+
+      // Step 3: Confirm these disciplines exist.
+      const { data: validSubroles, error: validError } =
+        await supabaseAdmin
+          .from("subroles")
+          .select("id")
+          .in("id", allowedIds);
+
+      if (validError) throw validError;
+
+      if ((validSubroles || []).length !== allowedIds.length) {
+        return response.status(400).json({
+          message: "One or more disciplines do not exist."
+        });
+      }
+
+      // Step 4: Check the students already enrolled.
+      const { data: enrollments, error: enrollmentError } =
+        await school
+          .from("classroom_enrollments")
+          .select("student_id")
+          .eq("classroom_id", classroom.id)
+          .eq("status", "active");
+
+      if (enrollmentError) throw enrollmentError;
+
+      const enrolledIds = (enrollments || []).map(
+        (row) => row.student_id
+      );
+
+      // Prevent removal of a discipline that currently
+      // has students enrolled in this classroom.
+      if (enrolledIds.length > 0) {
+        const { data: profiles, error: profileError } =
+          await supabaseAdmin
+            .from("profiles")
+            .select("id, sub_role_id")
+            .in("id", enrolledIds);
+
+        if (profileError) throw profileError;
+
+        const hasDisallowedStudent =
+          (profiles || []).length !== enrolledIds.length ||
+          (profiles || []).some(
+            (profile) => !allowedIds.includes(profile.sub_role_id)
+          );
+
+        if (hasDisallowedStudent) {
+          return response.status(409).json({
+            message:
+              "Cannot remove a discipline while its students are enrolled."
+          });
+        }
+      }
+
+      // Step 5: Get the existing accepted disciplines.
+      const { data: existingRows, error: existingError } =
+        await school
+          .from("classroom_allowed_subroles")
+          .select("subrole_id")
+          .eq("classroom_id", classroom.id);
+
+      if (existingError) throw existingError;
+
+      const existingIds = (existingRows || []).map(
+        (row) => row.subrole_id
+      );
+
+      // Determine what needs to be added or removed.
+      const toAdd = allowedIds.filter(
+        (id) => !existingIds.includes(id)
+      );
+
+      const toRemove = existingIds.filter(
+        (id) => !allowedIds.includes(id)
+      );
+
+      // Step 6: Insert newly accepted disciplines.
+      if (toAdd.length > 0) {
+        const rows = toAdd.map((id) => ({
+          classroom_id: classroom.id,
+          subrole_id: id
+        }));
+
+        const { error } = await school
+          .from("classroom_allowed_subroles")
+          .insert(rows);
+
+        if (error) throw error;
+      }
+
+      // Step 7: Remove disciplines no longer accepted.
+      if (toRemove.length > 0) {
+        const { error } = await school
+          .from("classroom_allowed_subroles")
+          .delete()
+          .eq("classroom_id", classroom.id)
+          .in("subrole_id", toRemove);
+
+        if (error) throw error;
+      }
+
+      // Step 8: Record the Admin's change.
+      await writeAuditLog(supabaseAdmin, {
+        actor_id: actor.id,
+        action: "classroom.disciplines_updated",
+        details: {
+          classroomId: classroom.id,
+          allowedSubroleIds: allowedIds
+        }
+      });
+
+      return response.json({
+        message: "Accepted classroom disciplines updated."
+      });
+
+    } catch (error) {
+      console.error("Unable to update disciplines:", error);
+
+      return response.status(500).json({
+        message: "Unable to update accepted disciplines."
+      });
+    }
+  }
+);
+
 
 adminRouter.post("/students/bulk-invite", async (request, response) => {
   const students = Array.isArray(request.body.students) ? request.body.students.slice(0, 100) : [];
@@ -583,6 +887,126 @@ adminRouter.post("/students/bulk-invite", async (request, response) => {
   } catch (error) {
     console.error("Unable to bulk invite students:", error);
     return response.status(500).json({ message: error.message || "Unable to create student accounts." });
+  }
+});
+
+adminRouter.post("/patients/bulk-create", async (request, response) => {
+  const patients = Array.isArray(request.body.patients)
+    ? request.body.patients.slice(0, 100)
+    : [];
+
+  if (!patients.length) {
+    return response.status(400).json({
+      message: "Add at least one patient before creating accounts.",
+    });
+  }
+
+  try {
+    const context = await requireAdmin(request, response);
+    if (!context) return;
+
+    const { supabaseAdmin, actor } = context;
+    if (!(await ensureAuditLogReady(supabaseAdmin, response))) return;
+
+    const { data: patientRole, error: roleError } = await supabaseAdmin
+      .from("roles")
+      .select("id")
+      .eq("name", "Patient")
+      .single();
+
+    if (roleError || !patientRole) {
+      throw roleError || new Error("Patient role is not configured.");
+    }
+
+    const created = [];
+    const failed = [];
+
+    for (const entry of patients) {
+      const firstName = String(entry.firstName || "").trim();
+      const lastName = String(entry.lastName || "").trim();
+      const utepId = String(entry.utepId || "").trim() || null;
+
+      if (!firstName || !lastName) {
+        failed.push({
+          name: `${firstName} ${lastName}`.trim() || "Unnamed patient",
+          message: "A first and last name are required.",
+        });
+        continue;
+      }
+
+      const temporaryPassword = generateTemporaryPassword();
+      let email = "";
+      let authData = null;
+      let authError = null;
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        email = makeCareflowEmail(firstName, lastName);
+        const result = await supabaseAdmin.auth.admin.createUser({
+          email,
+          password: temporaryPassword,
+          email_confirm: true,
+          user_metadata: {
+            first_name: firstName,
+            last_name: lastName,
+            display_name: `${firstName} ${lastName}`,
+            must_change_password: true,
+          },
+        });
+        authData = result.data;
+        authError = result.error;
+
+        if (!authError || !/already registered|already exists|duplicate/i.test(authError.message || "")) {
+          break;
+        }
+      }
+
+      if (authError || !authData?.user) {
+        failed.push({
+          name: `${firstName} ${lastName}`,
+          message: authError?.message || "Unable to create the Auth account.",
+        });
+        continue;
+      }
+
+      const { error: profileError } = await supabaseAdmin.from("profiles").insert({
+        id: authData.user.id,
+        first_name: firstName,
+        last_name: lastName,
+        utep_id: utepId,
+        role_id: patientRole.id,
+        sub_role_id: null,
+      });
+
+      if (profileError) {
+        await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+        failed.push({ name: `${firstName} ${lastName}`, message: profileError.message });
+        continue;
+      }
+
+      await writeAuditLog(supabaseAdmin, {
+        actor_id: actor.id,
+        target_user_id: authData.user.id,
+        action: "patient.bulk_created",
+        details: { email },
+      });
+      created.push({
+        id: authData.user.id,
+        name: `${firstName} ${lastName}`,
+        email,
+        temporaryPassword,
+      });
+    }
+
+    return response.status(201).json({
+      created,
+      failed,
+      message: `${created.length} patient account${created.length === 1 ? "" : "s"} created.`,
+    });
+  } catch (error) {
+    console.error("Unable to bulk create patients:", error);
+    return response.status(500).json({
+      message: error.message || "Unable to create patient accounts.",
+    });
   }
 });
 
@@ -830,6 +1254,240 @@ adminRouter.get("/audit-log", async (request, response) => {
     return response.status(500).json({ message: "Unable to load the audit log." });
   }
 });
+
+//Dereks Global Audit Log
+//Page for Admins to view all activity in the system. This is a global audit log that shows all activity in the system, not just admin activity. This is useful for tracking down issues and seeing what users are doing in the system.
+adminRouter.get("/global-audit-log", async (request, response) => {
+  try {
+    // Step 1: Make sure the user is an Admin.
+    const context = await requireAdmin(request, response);
+
+    if (!context) {
+      return;
+    }
+
+    const database = context.supabaseAdmin;
+
+    // Step 2: Get the global audit log from the database.
+    // Allow a small set of safe page sizes for the Admin table.
+    const requestedPageSize = Number(request.query.pageSize);
+    const pageSize = [5, 10, 20, 50].includes(requestedPageSize)
+      ? requestedPageSize
+      : 20;
+    const requestedPage = Number(request.query.page);
+    const page = Number.isSafeInteger(requestedPage)
+      ? Math.max(1, Math.min(requestedPage, 1000))
+      : 1;
+
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize - 1;
+
+    
+    // Derek's Global Audit Log search and filters.
+
+    // Read the filters sent from React.
+    const search = String(request.query.search || "").trim();
+    const role = String(request.query.role || "all");
+    const action = String(request.query.action || "all");
+
+    // Only allow recognized roles and actions.
+    const allowedRoles = [
+      "all", "Student", "Instructor", "Admin", "Patient"
+    ];
+
+    const allowedActions = [
+      "all",
+      "note.created",
+      "note.updated",
+      "note.submitted",
+      "note.reviewed",
+      "account.invited",
+      "account.activated",
+      "account.deactivated",
+      "account.access_updated",
+      "account.password_reset_requested",
+      "classroom.created",
+      "student.bulk_invited"
+    ];
+
+    if (
+      search.length > 80 ||
+      !allowedRoles.includes(role) ||
+      !allowedActions.includes(action)
+    ) {
+      return response.status(400).json({
+        message: "Invalid audit log filters."
+      });
+    }
+
+    // Find matching users when a name or role is selected.
+    let matchingActorIds = null;
+
+    if (search || role !== "all") {
+      let profilesQuery = database
+        .from("profiles")
+        .select("id, first_name, last_name");
+
+      // Filter profiles by role.
+      if (role !== "all") {
+        const { data: selectedRole, error: roleError } =
+          await database
+            .from("roles")
+            .select("id")
+            .eq("name", role)
+            .maybeSingle();
+
+        if (roleError) throw roleError;
+
+        if (!selectedRole) {
+          return response.json({
+            logs: [], total: 0, page, pageSize
+          });
+        }
+
+        profilesQuery = profilesQuery.eq("role_id", selectedRole.id);
+      }
+
+      // Split names into search words.
+      // Example: "Bart Simpson" becomes ["bart", "simpson"].
+      const words = search.toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+
+      if (search && words.length === 0) {
+        return response.json({
+          logs: [], total: 0, page, pageSize
+        });
+      }
+
+      // Narrow the database search using the first word.
+      if (words.length > 0) {
+        const firstWord = words[0];
+
+        profilesQuery = profilesQuery.or(
+          `first_name.ilike.%${firstWord}%,last_name.ilike.%${firstWord}%`
+        );
+      }
+
+      const { data: profiles, error: profilesError } =
+        await profilesQuery;
+
+      if (profilesError) throw profilesError;
+
+      // Check the full name against every search word.
+      matchingActorIds = (profiles || [])
+        .filter((profile) => {
+          const fullName =
+            `${profile.first_name || ""} ${profile.last_name || ""}`
+              .toLowerCase();
+
+          return words.every((word) => fullName.includes(word));
+        })
+        .map((profile) => profile.id);
+
+      // No matching users means no matching audit events.
+      if (matchingActorIds.length === 0) {
+        return response.json({
+          logs: [], total: 0, page, pageSize
+        });
+      }
+    }
+
+    // Build the audit query.
+    let auditQuery = database
+      .from("admin_audit_log")
+      .select(
+        "id, actor_id, target_user_id, action, entity_type, entity_id, details, created_at",
+        { count: "exact" }
+      );
+
+    // Filter by the selected action.
+    if (action === "note.updated") {
+      // Include our earlier event naming convention.
+      auditQuery = auditQuery.in("action", [
+        "note.updated", "note.update"
+      ]);
+    } else if (action !== "all") {
+      auditQuery = auditQuery.eq("action", action);
+    }
+
+    // Limit events to matching users.
+    if (matchingActorIds !== null) {
+      auditQuery = auditQuery.in("actor_id", matchingActorIds);
+    }
+
+    // Apply sorting and pagination AFTER filtering.
+    const { data, error, count } = await auditQuery
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(start, end);
+
+    if (error) {
+      throw error;
+    }
+
+    //Display the actual user names in the audit log
+    const auditLogs = data || [];
+
+    const actorIds = [
+      ...new Set(auditLogs.map((entry) => entry.actor_id))
+    ];
+
+    //Find the corresponding profiles
+    let profiles = [];
+
+    if (actorIds.length > 0) {
+      const { data: userProfiles, error: profileError } =
+        await database
+          .from("profiles")
+          .select("id, first_name, last_name, roles(name)")
+          .in("id", actorIds);
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    profiles = userProfiles || [];
+    }
+
+    //Match the each profile to its User ID
+    const profileMap = new Map();
+
+    for (const profile of profiles) {
+      profileMap.set(profile.id, profile);
+    }
+
+    //Add the user name and role to the corresponding audit event
+    const logsWithNames = auditLogs.map((entry) => {
+      const profile = profileMap.get(entry.actor_id);
+
+      const fullName = profile
+        ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim()
+        : "";
+
+      return {
+        ...entry,
+        actor_name: fullName || "Unknown user",
+        actor_role: getRelationName(profile?.roles) || "Role unavailable"
+      };
+    });
+
+    // Send the records to the frontend, along with pagination information.
+    return response.json({
+      logs: logsWithNames,
+      total: count || 0,
+      page: page,
+      pageSize: pageSize,
+    });
+  } catch (error) {
+    console.error("Unable to load global audit log:", error);
+
+    return response.status(500).json({
+      message: "Unable to load the global audit log.",
+    });
+  }
+});
+
+
+
 
 
 // ADMIN CLASSROOM AND STUDENT ACTIVITY

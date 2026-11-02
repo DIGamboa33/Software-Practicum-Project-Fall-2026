@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { getSupabaseAdmin, supabase } from "../services/supabase.js";
+import { writeAuditLog } from "../services/auditLog.js";
 
 const instructorRouter = Router();
 
@@ -128,6 +129,60 @@ async function eligibleStudents(supabaseAdmin, subroleId) {
   return (data || []).map(formatProfile);
 }
 
+
+ // Derek cross-discipline classroom eligibility.
+async function eligibleStudentsForClassroom(supabaseAdmin, classroomId) {
+
+  // Find every discipline accepted by this classroom.
+  const { data: allowedDisciplines, error: disciplineError } =
+    await supabaseAdmin
+      .schema("school")
+      .from("classroom_allowed_subroles")
+      .select("subrole_id")
+      .eq("classroom_id", classroomId);
+
+  if (disciplineError) {
+    throw disciplineError;
+  }
+
+  // Collect the accepted discipline IDs.
+  const allowedIds = (allowedDisciplines || []).map(
+    (item) => item.subrole_id
+  );
+
+  if (allowedIds.length === 0) {
+    return [];
+  }
+
+  // Step 2: Find the Student role.
+  const { data: studentRole, error: roleError } =
+    await supabaseAdmin
+      .from("roles")
+      .select("id")
+      .eq("name", "Student")
+      .single();
+
+  if (roleError) {
+    throw roleError;
+  }
+
+  // Step 3: Find students belonging to ANY accepted discipline.
+  const { data: students, error: studentError } =
+    await supabaseAdmin
+      .from("profiles")
+      .select("id, first_name, last_name, utep_id, subroles(name)")
+      .eq("role_id", studentRole.id)
+      .in("sub_role_id", allowedIds)
+      .order("last_name");
+
+  if (studentError) {
+    throw studentError;
+  }
+
+  return (students || []).map(formatProfile);
+}
+
+
 instructorRouter.get("/dashboard", async (request, response) => {
   try {
     const context = await requireInstructor(request, response);
@@ -215,7 +270,7 @@ instructorRouter.get("/classrooms/:classroomId", async (request, response) => {
       await Promise.all([
         school.from("classroom_enrollments").select("student_id, status").eq("classroom_id", access.classroom.id).eq("status", "active"),
         school.from("classroom_groups").select("id, name").eq("classroom_id", access.classroom.id).order("name"),
-        eligibleStudents(context.supabaseAdmin, access.classroom.discipline_subrole_id),
+        eligibleStudentsForClassroom(context.supabaseAdmin, access.classroom.id),
       ]);
     if (enrollmentError || groupError) throw enrollmentError || groupError;
 
@@ -254,6 +309,139 @@ instructorRouter.get("/classrooms/:classroomId", async (request, response) => {
     return response.status(500).json({ message: "Unable to load this classroom." });
   }
 });
+
+
+ // Derek: Enroll eligible students in an existing classroom.
+instructorRouter.post(
+  "/classrooms/:classroomId/enrollments",
+  async (request, response) => {
+
+    const input = request.body.studentIds;
+
+    if (
+      !Array.isArray(input) ||
+      input.length === 0 ||
+      input.length > 30 ||
+      input.some((id) => typeof id !== "string" || !id.trim())
+    ) {
+      return response.status(400).json({
+        message: "Select between 1 and 30 students."
+      });
+    }
+
+    // Prevent duplicate student IDs.
+    const studentIds = [...new Set(input)];
+
+    try {
+      // Step 1: Verify the Instructor.
+      const context = await requireInstructor(request, response);
+      if (!context) return;
+
+      // Step 2: Verify their classroom access.
+      const access = await verifyClassroomAccess(
+        context.supabaseAdmin,
+        context.profile,
+        request.params.classroomId
+      );
+
+      if (!access) {
+        return response.status(404).json({
+          message: "Classroom not found."
+        });
+      }
+
+      if (access.classroom.status !== "active") {
+        return response.status(400).json({
+          message: "This classroom is not active."
+        });
+      }
+
+      // Step 3: Find all students eligible for this classroom.
+      const eligible = await eligibleStudentsForClassroom(
+        context.supabaseAdmin,
+        access.classroom.id
+      );
+
+      const eligibleIds = new Set(
+        eligible.map((student) => student.id)
+      );
+
+      // Never trust IDs received from the React form alone.
+      if (!studentIds.every((id) => eligibleIds.has(id))) {
+        return response.status(400).json({
+          message: "One or more students are not eligible."
+        });
+      }
+
+      const school = context.supabaseAdmin.schema("school");
+
+      // Step 4: Check for existing enrollment records.
+      const { data: existing, error: existingError } =
+        await school
+          .from("classroom_enrollments")
+          .select("student_id, status")
+          .eq("classroom_id", access.classroom.id)
+          .in("student_id", studentIds);
+
+      if (existingError) throw existingError;
+
+      // Do not enroll someone who is already active.
+      if ((existing || []).some(
+        (row) => row.status === "active"
+      )) {
+        return response.status(409).json({
+          message: "A selected student is already enrolled."
+        });
+      }
+
+      // Step 5: Reactivate existing inactive enrollments.
+      for (const row of existing || []) {
+        const { error } = await school
+          .from("classroom_enrollments")
+          .update({ status: "active" })
+          .eq("classroom_id", access.classroom.id)
+          .eq("student_id", row.student_id);
+
+        if (error) throw error;
+      }
+
+      // Step 6: Insert students not previously enrolled.
+      const previousIds = new Set(
+        (existing || []).map((row) => row.student_id)
+      );
+
+      const newIds = studentIds.filter(
+        (id) => !previousIds.has(id)
+      );
+
+      if (newIds.length > 0) {
+        const enrollmentRows = newIds.map((studentId) => ({
+          classroom_id: access.classroom.id,
+          student_id: studentId
+        }));
+
+        const { error } = await school
+          .from("classroom_enrollments")
+          .insert(enrollmentRows);
+
+        if (error) throw error;
+      }
+
+      return response.status(201).json({
+        message:
+          `${studentIds.length} student(s) enrolled successfully.`
+      });
+
+    } catch (error) {
+      console.error("Unable to enroll students:", error);
+
+      return response.status(500).json({
+        message: "Unable to enroll students."
+      });
+    }
+  }
+);
+
 
 instructorRouter.post("/classrooms/:classroomId/groups", async (request, response) => {
   const name = String(request.body.name || "").trim();
@@ -433,6 +621,42 @@ instructorRouter.post("/classrooms", async (request, response) => {
       .select("id, crn, full_name, short_name, room, term, discipline_subrole_id, status")
       .single();
     if (classroomError) return response.status(400).json({ message: classroomError.message });
+
+
+    // Derek cross-discipline classroom creation.
+    // Automatically add the instructor's discipline as an accepted discipline for the new classroom.
+
+    const { error: allowedDisciplineError } = await school
+      .from("classroom_allowed_subroles")
+      .insert({
+        classroom_id: classroom.id,
+        subrole_id: context.profile.sub_role_id
+      });
+
+    if (allowedDisciplineError) {
+      console.error(
+        "Unable to save classroom discipline:",
+        allowedDisciplineError
+      );
+
+      // Undo classroom creation if the discipline insert fails.
+      const { error: cleanupError } = await school
+        .from("classrooms")
+        .delete()
+        .eq("id", classroom.id);
+
+      if (cleanupError) {
+        console.error(
+          "Unable to undo classroom creation:",
+          cleanupError
+        );
+      }
+
+      return response.status(500).json({
+        message: "Unable to register the classroom's discipline."
+      });
+    }
+
 
     const { error: instructorError } = await school.from("classroom_instructors").insert({
       classroom_id: classroom.id,
@@ -744,6 +968,26 @@ instructorRouter.patch(
           .update({ status: "Pending Review" })
           .eq("id", reviewedNote.id);
         throw reviewError;
+      }
+
+      //Dereks audit log for submission review
+      //Record the review action in the audit log
+      try {
+        await writeAuditLog(
+          admin, {
+            actor_id: profile.id,
+            action: "note.reviewed",
+            entity_type: "clinical_note",
+            entity_id: String(reviewedNote.id),
+            details: {
+              assignment_id: assignment.id,
+              decision: decision,
+            }
+          }
+        );
+        console.log("Audit log entry created for note review.");
+      } catch (error) {
+        console.error("Error writing audit log:", error);
       }
 
       return response.json({
@@ -1132,160 +1376,6 @@ instructorRouter.get("/patients", async (request, response) => {
 
     return response.status(500).json({
       message: "Unable to load patients.",
-    });
-  }
-});
-
-
-instructorRouter.post("/patients", async (request, response) => {
-  try {
-    const context = await requireInstructor(request, response);
-    if (!context) return;
-
-    const admin = context.supabaseAdmin;
-
-    const firstName = String(
-      request.body?.firstName || ""
-    ).trim();
-
-    const lastName = String(
-      request.body?.lastName || ""
-    ).trim();
-
-    const dateOfBirth = String(
-      request.body?.dateOfBirth || ""
-    ).trim();
-
-    const sex = String(
-      request.body?.sex || ""
-    ).trim();
-
-    const phone = String(
-      request.body?.phone || ""
-    ).trim();
-
-    const address = String(
-      request.body?.address || ""
-    ).trim();
-
-    if (!firstName || !lastName || !dateOfBirth || !sex) {
-      return response.status(400).json({
-        message:
-          "First name, last name, date of birth, and sex are required.",
-      });
-    }
-
-    if (
-      !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth) ||
-      Number.isNaN(Date.parse(`${dateOfBirth}T00:00:00Z`)) ||
-      dateOfBirth > new Date().toISOString().slice(0, 10)
-    ) {
-      return response.status(400).json({
-        message: "Enter a valid date of birth.",
-      });
-    }
-
-    if (!["Female", "Male", "Other"].includes(sex)) {
-      return response.status(400).json({
-        message: "Select a valid sex.",
-      });
-    }
-
-    const { data: patientRole, error: roleError } =
-      await admin
-        .from("roles")
-        .select("id")
-        .eq("name", "Patient")
-        .single();
-
-    if (roleError || !patientRole) {
-      return response.status(500).json({
-        message: "Patient role is not configured.",
-      });
-    }
-
-    const { randomBytes, randomUUID } =
-      await import("node:crypto");
-
-    const email = `simulated.${randomUUID()}@careflow.test`;
-    const password = randomBytes(32).toString("base64url");
-
-    const { data: authData, error: authError } =
-      await admin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: {
-          first_name: firstName,
-          last_name: lastName,
-          display_name: `${firstName} ${lastName}`,
-          simulated_patient: true,
-        },
-      });
-
-    if (authError || !authData?.user) {
-      return response.status(500).json({
-        message:
-          authError?.message ||
-          "Unable to create patient account.",
-      });
-    }
-
-    const profileId = authData.user.id;
-
-    try {
-      const { error: profileError } =
-        await admin.from("profiles").insert({
-          id: profileId,
-          first_name: firstName,
-          last_name: lastName,
-          role_id: patientRole.id,
-        });
-
-      if (profileError) throw profileError;
-
-      const { data: patientRecord, error: recordError } =
-        await admin
-          .from("patient_records")
-          .insert({
-            profile_id: profileId,
-            date_of_birth: dateOfBirth,
-            sex,
-            phone: phone || null,
-            address: address || null,
-          })
-          .select("id, profile_id")
-          .single();
-
-      if (recordError) throw recordError;
-
-      return response.status(201).json({
-        message: "Patient created successfully.",
-        patient: {
-          id: patientRecord.id,
-          profileId: patientRecord.profile_id,
-          name: `${firstName} ${lastName}`,
-        },
-      });
-    } catch (creationError) {
-
-      const { error: cleanupError } =
-        await admin.auth.admin.deleteUser(profileId);
-
-      if (cleanupError) {
-        console.error(
-          "Patient creation rollback failed:",
-          cleanupError
-        );
-      }
-
-      throw creationError;
-    }
-  } catch (error) {
-    console.error("Unable to create instructor patient:", error);
-
-    return response.status(500).json({
-      message: "Unable to create patient.",
     });
   }
 });

@@ -16,7 +16,8 @@ export const adminNavigation = [
   { id: "academics", label: "Semesters & classes", icon: "calendar" },
   { id: "users", label: "Global user search", icon: "patients" },
   {id: "patients", label: "Patients", icon: "patients" },
-  { id: "activity", label: "Classroom & Student Activity", icon: "chart" },
+  { id: "activity", label: "Classroom Activity", icon: "chart" },
+  { id: "audit", label: "Audit Log", icon: "chart" },
 ];
 
 export const patientNavigation = [
