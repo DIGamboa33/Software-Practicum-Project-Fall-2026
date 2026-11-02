@@ -449,15 +449,16 @@ async function loadAssignedCases(id) {
             </section>
           )}
 
-                  {isAssignOpen && (
+          {isAssignOpen && (
             <AssignCaseModal
-              classroom={classroom}
-              onAssigned={(result) => {
-                          setNotice(result.message);
-                          loadAssignedCases(classroomId);
-                        }}
+              classrooms={classrooms}
+              initialDetail={classroomDetail}
+              onAssigned={(result, assignedClassroomId) => {
+                setNotice(result.message);
+                if (assignedClassroomId !== classroomId) setClassroomId(assignedClassroomId);
+                else loadAssignedCases(assignedClassroomId);
+              }}
               onClose={() => setIsAssignOpen(false)}
-              students={classroomDetail.students}
             />
           )}
         </>  

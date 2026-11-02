@@ -3964,17 +3964,6 @@ td small {
   gap: 12px;
   margin-top: 16px;
 }
-.assign-modal__header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 16px;
-}
-
-.assign-modal__header h2 {
-  flex: 1 1 auto;
-  margin: 0;
-}
 
 .demo-assignments {
   display: grid;
@@ -3997,15 +3986,103 @@ td small {
   font-size: 0.9rem;
 }
 
-.rubric-editor { display: grid; gap: 8px; }
-.rubric-editor p { margin: 0; font-weight: 600; font-size: 0.9rem; }
-.rubric-editor__row { display: grid; grid-template-columns: 1fr 90px 36px; gap: 8px; align-items: center; }
+.assigned-cases details summary { 
+  cursor: pointer; color: #3d4f9f; 
+}
 
-.assigned-cases details summary { cursor: pointer; color: #3d4f9f; }
-.assigned-cases ul { margin: 8px 0 0; padding-left: 18px; }
+.assigned-cases ul { 
+  margin: 8px 0 0; padding-left: 18px; 
+}
 
 .assigned-cases {
   padding: 24px 28px;
   margin-top: 24px;
   margin-bottom: 24px;
 }
+
+.assign-modal { 
+  width: min(880px, 94vw); 
+  max-height: 92vh; 
+  padding: 0; 
+  border: none; 
+  border-radius: 16px; 
+  box-shadow: 0 24px 60px rgba(20, 28, 48, .3);
+ }
+.assign-modal::backdrop { background: rgba(20, 28, 48, .55); }
+
+.assign-modal__form { 
+  display: flex; flex-direction: 
+  column; max-height: 92vh; 
+}
+
+.assign-modal__header { 
+  padding: 22px 28px 6px;
+ }
+
+.assign-modal__header h2 { 
+  margin: 4px 0 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 18px; 
+}
+.assign-modal__body { 
+  overflow-y: auto; padding: 12px 28px 22px; 
+}
+.admin-form--one { 
+  grid-template-columns: 1fr; 
+}
+.admin-form textarea {
+
+   width: 100%; 
+   box-sizing: border-box; 
+   padding: 10px 11px; 
+   border: 1px solid #dce2ed; 
+   border-radius: 8px; color: #3f4d67; 
+   font: inherit; 
+   font-size: 12px; 
+   resize: vertical; 
+  }
+.admin-form textarea:focus { 
+  border-color: #7690df; 
+  box-shadow: 0 0 0 3px rgba(118, 144, 223, .13); 
+  outline: 0; 
+}
+.assign-modal__section { display: grid; gap: 13px; }
+
+.assign-modal__section h3 { 
+  margin: 0; 
+  color: #34405b; 
+  font-size: 14px; 
+}
+
+.assign-grid { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; gap: 13px; 
+}
+
+.assign-list-row { 
+  display: grid; 
+  grid-template-columns: 1fr 34px; 
+  gap: 8px; 
+  align-items: center; 
+}
+
+.rubric-editor__row { 
+  display: grid; 
+  grid-template-columns: 1fr 80px 34px; gap: 8px; 
+  align-items: center; 
+}
+
+.assign-audience { 
+  display: flex; 
+  flex-wrap: wrap; 
+  gap: 8px; 
+  margin: 0; 
+  padding: 0; 
+  border: 0; 
+}
+
+.assign-modal .admin-form__actions { 
+  padding: 14px 28px 22px; 
+  border-top: 1px solid #edf0f5; 
+}
+.assign-slot--removed { opacity: .6; }
+
+@media (max-width: 640px) { .assign-grid { grid-template-columns: 1fr; } }
