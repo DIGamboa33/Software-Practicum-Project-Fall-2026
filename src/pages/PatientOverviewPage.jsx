@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import Icon from "../components/Icon";
 import Pagination from "../components/Pagination";
-import { fetchPatientDashboard } from "../lib/api";
+import { fetchPatientDashboard, fetchPatientRecord } from "../lib/api";
 
 function PatientOverviewPage({ user }) {
   const [dashboard, setDashboard] = useState(null);
+  const [patientRecord, setPatientRecord] = useState(null);
   const [error, setError] = useState("");
   const [medicationPage, setMedicationPage] = useState(1);
   const [medicationsPerPage, setMedicationsPerPage] = useState(5);
@@ -14,15 +15,21 @@ function PatientOverviewPage({ user }) {
 
   useEffect(() => {
     let isCurrent = true;
-    async function loadDashboard() {
+    async function loadData() {
       try {
-        const result = await fetchPatientDashboard();
-        if (isCurrent) setDashboard(result);
+        const [dashResult, recordResult] = await Promise.all([
+          fetchPatientDashboard(),
+          fetchPatientRecord().catch(() => null)
+        ]);
+        if (isCurrent) {
+          setDashboard(dashResult);
+          setPatientRecord(recordResult);
+        }
       } catch (loadError) {
         if (isCurrent) setError(loadError instanceof Error ? loadError.message : "Unable to load dashboard.");
       }
     }
-    loadDashboard();
+    loadData();
     return () => { isCurrent = false; };
   }, []);
 
@@ -34,6 +41,7 @@ function PatientOverviewPage({ user }) {
         { label: "Clinical alerts", value: dashboard.metrics.unreadUpdates, note: "Unread updates", tone: "amber", icon: "bell" },
       ]
     : [];
+
   const medicationStatusData = useMemo(() => {
     const totals = (dashboard?.medications || []).reduce((counts, medication) => {
       const status = medication.status || "Unspecified";
@@ -42,6 +50,7 @@ function PatientOverviewPage({ user }) {
     }, {});
     return Object.entries(totals).map(([name, value]) => ({ name, value }));
   }, [dashboard]);
+
   const visibleMedications = (dashboard?.medications || []).slice((medicationPage - 1) * medicationsPerPage, medicationPage * medicationsPerPage);
   const visibleHistory = (dashboard?.medicalHistory || []).slice((historyPage - 1) * historyPerPage, historyPage * historyPerPage);
 
@@ -55,12 +64,32 @@ function PatientOverviewPage({ user }) {
         </div>
       </section>
 
-      {error && <section className="panel directory-error">{error}</section>}
-      {!dashboard && !error && <section className="panel directory-loading">Loading your health portal…</section>}
+      {/* Patient Demographics Banner placed after Good afternoon heading */}
+      {patientRecord && (
+        <section className="panel" style={{ marginTop: "16px", background: "#f8fafc", padding: "16px 20px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+            <div>
+              <span className="section-label">Patient Demographics</span>
+              <h3 style={{ margin: "4px 0 0 0", fontSize: "16px" }}>
+                {patientRecord.primary_provider ? `Primary Provider: ${patientRecord.primary_provider}` : "Patient Record Profile"}
+              </h3>
+            </div>
+            <div style={{ display: "flex", gap: "20px", fontSize: "14px", color: "#475569", flexWrap: "wrap" }}>
+              <span><strong>DOB:</strong> {patientRecord.date_of_birth || "N/A"}</span>
+              <span><strong>Sex:</strong> {patientRecord.sex || "N/A"}</span>
+              <span><strong>Phone:</strong> {patientRecord.phone || "N/A"}</span>
+              <span><strong>Insurance Policy:</strong> {patientRecord.insurance_policy_number || "On File"}</span>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {error && <section className="panel directory-error" style={{ marginTop: "16px" }}>{error}</section>}
+      {!dashboard && !error && <section className="panel directory-loading" style={{ marginTop: "16px" }}>Loading your health portal…</section>}
 
       {dashboard && (
         <>
-          <section className="instructor-overview-metrics">
+          <section className="instructor-overview-metrics" style={{ marginTop: "20px" }}>
             {metrics.map((metric) => (
               <article className={`panel instructor-overview-metric instructor-overview-metric--${metric.tone}`} key={metric.label}>
                 <div className="patient-metric-heading"><span>{metric.label}</span><Icon name={metric.icon} size={17} /></div>

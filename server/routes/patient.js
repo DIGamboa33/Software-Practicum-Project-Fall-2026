@@ -241,5 +241,47 @@ patientRouter.get("/vitals", async (request, response) => {
         return response.status(500).json({ message: "Unable to load vitals." });
     }
 });
+// Fetch patient demographic record from the public schema
+patientRouter.get("/record", async (request, response) => {
+    try {
+        const context = await requirePatient(request, response);
+        if (!context) return;
+        const { supabaseAdmin, user } = context;
+
+        const { data, error } = await supabaseAdmin
+            .from('patient_records')
+            .select('*')
+            .eq('profile_id', user.id)
+            .single();
+
+        if (error && error.code !== 'PGRST116') throw error;
+        return response.json(data || null);
+    } catch (error) {
+        console.error("Error fetching patient record:", error);
+        return response.status(500).json({ message: "Unable to load patient record." });
+    }
+});
+
+// Fetch patient vitals from the patient_portal schema
+patientRouter.get("/vitals", async (request, response) => {
+    try {
+        const context = await requirePatient(request, response);
+        if (!context) return;
+        const { supabaseAdmin, user } = context;
+
+        const { data, error } = await supabaseAdmin
+            .schema('patient_portal')
+            .from('vitals')
+            .select('*')
+            .eq('patient_id', user.id)
+            .order('recorded_date', { ascending: false });
+
+        if (error) throw error;
+        return response.json(data || []);
+    } catch (error) {
+        console.error("Error fetching vitals:", error);
+        return response.status(500).json({ message: "Unable to load vitals." });
+    }
+});
 
 export default patientRouter;
