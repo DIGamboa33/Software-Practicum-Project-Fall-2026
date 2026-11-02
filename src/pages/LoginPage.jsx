@@ -22,8 +22,8 @@ function describeSupabaseError(error) {
 
 function LoginPage({ onLogin }) {
   const [searchParams] = useSearchParams();
-  const [email, setEmail] = useState("dr.rivera@careflow.test");
-  const [password, setPassword] = useState("Careflow2026!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [roles, setRoles] = useState([]);
   const [rolesStatus, setRolesStatus] = useState("loading");
@@ -138,23 +138,7 @@ async function handleSubmit(event) {
               {isSubmitting ? "Signing in…" : "Sign in to dashboard"} <span>→</span>
             </button>
           </form>
-          <div className="demo-credentials">
-            <strong>Demo accounts</strong>
-            <span>Student: javier.lopez@careflow.test</span>
-            <span>Password: Student123</span>
-            <hr></hr>
-            <span>Student: Bart.Simpson@careflow.test</span>
-            <span>Password: Bart1234</span>
-            <hr></hr>
-            <span>Instructor: dr.rivera@careflow.test</span>
-            <span>Password: Careflow2026!</span>
-            <hr></hr>
-            <span>Patient: morgan.lee@careflow.test</span>
-            <span>Password: Patient123</span>
-            <hr></hr>
-            <span>Patient: avery.morgan@careflow.test</span>
-            <span>Password: Admin123</span>
-          </div>
+         
           {/*<section className="database-status" aria-live="polite">
             <strong>Supabase role lookup</strong>
             {rolesStatus === "loading" && <span>Loading roles…</span>}
