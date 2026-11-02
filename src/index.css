@@ -4062,6 +4062,160 @@ td small {
   margin-top: 16px;
 }
 
+.demo-assignments {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.demo-assignments li {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  background: #f4f7fd;
+  border-radius: 12px;
+}
+
+.demo-assignments span {
+  color: #5b6680;
+  font-size: 0.9rem;
+}
+
+.assigned-cases details summary { 
+  cursor: pointer; color: #3d4f9f; 
+}
+
+.assigned-cases ul { 
+  margin: 8px 0 0; padding-left: 18px; 
+}
+
+.assigned-cases {
+  padding: 24px 28px;
+  margin-top: 24px;
+  margin-bottom: 24px;
+}
+
+.assign-modal { 
+  width: min(880px, 94vw); 
+  max-height: 92vh; 
+  padding: 0; 
+  border: none; 
+  border-radius: 16px; 
+  box-shadow: 0 24px 60px rgba(20, 28, 48, .3);
+ }
+.assign-modal::backdrop { background: rgba(20, 28, 48, .55); }
+
+.assign-modal__form { 
+  display: flex; flex-direction: 
+  column; max-height: 92vh; 
+}
+
+.assign-modal__header { 
+  padding: 22px 28px 6px;
+ }
+
+.assign-modal__header h2 { 
+  margin: 4px 0 0; color: #34405b; font-family: Manrope, sans-serif; font-size: 18px; 
+}
+.assign-modal__body { 
+  overflow-y: auto; padding: 12px 28px 22px; 
+}
+.admin-form--one { 
+  grid-template-columns: 1fr; 
+}
+.admin-form textarea {
+
+   width: 100%; 
+   box-sizing: border-box; 
+   padding: 10px 11px; 
+   border: 1px solid #dce2ed; 
+   border-radius: 8px; color: #3f4d67; 
+   font: inherit; 
+   font-size: 12px; 
+   resize: vertical; 
+  }
+.admin-form textarea:focus { 
+  border-color: #7690df; 
+  box-shadow: 0 0 0 3px rgba(118, 144, 223, .13); 
+  outline: 0; 
+}
+.assign-modal__section { display: grid; gap: 13px; }
+
+.assign-modal__section h3 { 
+  margin: 0; 
+  color: #34405b; 
+  font-size: 14px; 
+}
+
+.assign-grid { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; gap: 13px; 
+}
+
+.chip-slot { display: grid; gap: 8px; }
+.chip-slot__label { color: #65738b; font-size: 11px; font-weight: 700; }
+.chip-slot__empty { color: #9ba5b5; font-size: 12px; }
+.chip-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 8px 6px 12px; border: 1px solid #cad5f3; border-radius: 999px;
+  color: #455783; background: #f3f6ff; font: inherit; font-size: 12px;
+}
+.chip button {
+  display: grid; place-items: center; width: 18px; height: 18px; padding: 0;
+  border: 0; border-radius: 50%; color: #5368b9; background: #dfe6fb; font-size: 13px; line-height: 1; cursor: pointer;
+}
+.chip button:hover { background: #c9d4f7; }
+.chip--hidden {
+  padding: 6px 12px; border-style: dashed; color: #8a94a8; background: #fafbfd; cursor: pointer;
+}
+.chip--hidden:hover { color: #455783; border-color: #7690df; }
+.chip-add { display: flex; gap: 8px; align-items: center; }
+.chip-hidden { display: grid; gap: 6px; padding-top: 8px; border-top: 1px dashed #dce2ed; }
+.chip-hidden > span { color: #9ba5b5; font-size: 11px; }
+
+.chip-add__button {
+  display: grid; place-items: center; flex: none;
+  width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%;
+  font-size: 20px; line-height: 1; cursor: pointer;
+  background:#7de4cf;
+}
+.chip-add__button:hover { filter: brightness(.95); }
+
+.rubric-editor__row { 
+  display: grid; 
+  grid-template-columns: 1fr 80px 34px; gap: 8px; 
+  align-items: center; 
+}
+
+.assign-audience { 
+  display: flex; 
+  flex-wrap: wrap; 
+  gap: 8px; 
+  margin: 0; 
+  padding: 0; 
+  border: 0; 
+}
+
+.assign-modal .admin-form__actions { 
+  padding: 14px 28px 22px; 
+  border-top: 1px solid #edf0f5; 
+}
+.assign-slot--removed { opacity: .6; }
+
+@media (max-width: 640px) { .assign-grid { grid-template-columns: 1fr; } }
+
+.draft-notice {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 8px;
+  color: #1f6b5a;
+  background: #e6f6f1;
+  font-size: 12px;
+  font-weight: 600;
+}
 
 /* Derek's Sidebar Overflow Fix */
 

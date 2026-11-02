@@ -1003,8 +1003,296 @@ instructorRouter.patch(
         message: "Unable to review this submission.",
       });
     }
+  });
+
+// ---- Create a case and assign it to students in a classroom ----
+const ASSIGNABLE_NOTE_TYPES = ["soap", "sbar"];
+
+function cleanText(value, maxLength) {
+  return String(value ?? "").trim().slice(0, maxLength);
+}
+
+function cleanList(value, maxItems = 20, maxLength = 300) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => cleanText(item, maxLength))
+    .filter(Boolean)
+    .slice(0, maxItems);
+}
+
+function cleanCriteria(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => ({
+      description: cleanText(item?.description, 300),
+      points: Number(item?.points),
+    }))
+    .filter((item) => item.description)
+    .slice(0, 30);
+}
+
+function ageFromDob(dob) {
+  const birth = new Date(`${dob}T00:00:00Z`);
+  const now = new Date();
+  let age = now.getUTCFullYear() - birth.getUTCFullYear();
+  const hadBirthday =
+    now.getUTCMonth() > birth.getUTCMonth() ||
+    (now.getUTCMonth() === birth.getUTCMonth() && now.getUTCDate() >= birth.getUTCDate());
+  if (!hadBirthday) age -= 1;
+  return age;
+}
+
+instructorRouter.post("/classrooms/:classroomId/assignments", async (request, response) => {
+  try {
+    const context = await requireInstructor(request, response);
+    if (!context) return;
+    const { supabaseAdmin: admin, profile } = context;
+
+    // The instructor must teach this class (the class id comes from the URL).
+    const access = await verifyClassroomAccess(admin, profile, request.params.classroomId);
+    if (!access) {
+      return response.status(404).json({ message: "Classroom not found." });
+    }
+
+    const body = request.body || {};
+    const input = body.patientCase || {};
+    const expectations = body.expectations || {};
+
+    const title = cleanText(input.title, 120);
+    const patientName = cleanText(input.patientName, 120);
+    const noteType = String(body.noteType || "soap");
+    const studentIds = [...new Set(Array.isArray(body.studentIds) ? body.studentIds : [])];
+
+    if (!title || !patientName) {
+      return response.status(400).json({ message: "Enter a case title and a patient name." });
+    }
+    if (!ASSIGNABLE_NOTE_TYPES.includes(noteType)) {
+      return response.status(400).json({ message: "That note type is not available yet." });
+    }
+    if (!studentIds.length) {
+      return response.status(400).json({ message: "Select at least one student." });
+    }
+
+    let patientAge = null;
+    if (input.patientAge !== "" && input.patientAge != null) {
+      patientAge = Number(input.patientAge);
+      if (!Number.isInteger(patientAge) || patientAge < 0 || patientAge > 120) {
+        return response.status(400).json({ message: "Age must be a whole number from 0 to 120." });
+      }
+    }
+
+        let dateOfBirth = null;
+    if (input.dateOfBirth) {
+      const dob = String(input.dateOfBirth).trim();
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(dob) ||
+        Number.isNaN(Date.parse(`${dob}T00:00:00Z`)) ||
+        dob > new Date().toISOString().slice(0, 10)
+      ) {
+        return response.status(400).json({ message: "Enter a valid date of birth." });
+      }
+      dateOfBirth = dob;
+      if (patientAge === null) patientAge = ageFromDob(dob);
+    }
+
+    const criteria = cleanCriteria(expectations.rubricCriteria);
+    if (criteria.some((item) => !Number.isFinite(item.points) || item.points < 0 || item.points > 1000)) {
+      return response.status(400).json({ message: "Each rubric criterion needs points from 0 to 1000." });
+    }
+
+    let dueAt = null;
+    if (body.dueAt) {
+      const parsed = new Date(body.dueAt);
+      if (Number.isNaN(parsed.getTime())) {
+        return response.status(400).json({ message: "Enter a valid due date." });
+      }
+      dueAt = parsed.toISOString();
+    }
+
+    // Every selected student must be actively enrolled in THIS class.
+    const { data: enrollments, error: enrollmentError } = await admin
+      .schema("school")
+      .from("classroom_enrollments")
+      .select("student_id")
+      .eq("classroom_id", access.classroom.id)
+      .eq("status", "active")
+      .in("student_id", studentIds);
+    if (enrollmentError) throw enrollmentError;
+
+    const enrolledIds = new Set((enrollments || []).map((row) => row.student_id));
+    if (!studentIds.every((id) => enrolledIds.has(id))) {
+      return response.status(400).json({
+        message: "Some selected students are not enrolled in this classroom.",
+      });
+    }
+
+    const learning = admin.schema("learning");
+
+    // 1. The case
+    const { data: createdCase, error: caseError } = await learning
+      .from("cases")
+      .insert({
+        title,
+        patient_name: patientName,
+        patient_age: patientAge,
+        date_of_birth: dateOfBirth,
+        patient_sex: cleanText(input.patientSex, 40) || null,
+        chief_complaint: cleanText(input.chiefComplaint, 500) || null,
+        history: cleanText(input.history, 2000) || null,
+        medications: cleanList(input.medications),
+        allergies: cleanList(input.allergies),
+        results: cleanText(input.results, 1000) || null,
+        starting_encounter_status: "Scheduled",
+        created_by: profile.id,
+      })
+      .select("id")
+      .single();
+    if (caseError) throw caseError;
+
+    // Deleting the case also removes its expectations and rubric (on delete cascade).
+    async function undoCase() {
+      await learning.from("cases").delete().eq("id", createdCase.id);
+    }
+
+    try {
+      // 2. Instructor-only answer key
+      const expectedDiagnoses = cleanList(expectations.expectedDiagnoses);
+      const instructorNotes = cleanText(expectations.instructorNotes, 2000) || null;
+
+      if (expectedDiagnoses.length || instructorNotes) {
+        const { error: expectationsError } = await learning
+          .from("case_expectations")
+          .insert({
+            case_id: createdCase.id,
+            expected_diagnoses: expectedDiagnoses,
+            instructor_notes: instructorNotes,
+          });
+        if (expectationsError) throw expectationsError;
+      }
+
+      // 3. Rubric criteria with points
+      if (criteria.length) {
+        const { error: criteriaError } = await learning
+          .from("rubric_criteria")
+          .insert(
+            criteria.map((item, index) => ({
+              case_id: createdCase.id,
+              position: index,
+              description: item.description,
+              max_points: item.points,
+            })),
+          );
+        if (criteriaError) throw criteriaError;
+      }
+
+      // 4. One assignment per student, tied to this class
+      const { error: assignmentError } = await learning
+        .from("student_case_assignments")
+        .insert(
+          studentIds.map((studentId) => ({
+            student_id: studentId,
+            case_id: createdCase.id,
+            classroom_id: access.classroom.id,
+            encounter_status: "Scheduled",
+            note_type: noteType,
+            due_at: dueAt,
+          })),
+        );
+      if (assignmentError) throw assignmentError;
+    } catch (stepError) {
+      await undoCase();
+      throw stepError;
+    }
+
+    return response.status(201).json({
+      caseId: createdCase.id,
+      assigned: studentIds.length,
+      message: `Assigned to ${studentIds.length} student${studentIds.length === 1 ? "" : "s"}.`,
+    });
+  } catch (error) {
+    console.error("Unable to assign case:", error.message || error);
+    return response.status(500).json({ message: "Unable to assign this case." });
   }
-);
+});
+
+// ---- List the cases assigned in a classroom ----
+instructorRouter.get("/classrooms/:classroomId/assignments", async (request, response) => {
+  try {
+    const context = await requireInstructor(request, response);
+    if (!context) return;
+    const { supabaseAdmin: admin, profile } = context;
+
+    const access = await verifyClassroomAccess(admin, profile, request.params.classroomId);
+    if (!access) return response.status(404).json({ message: "Classroom not found." });
+
+    const learning = admin.schema("learning");
+    const { data: assignments, error } = await learning
+      .from("student_case_assignments")
+      .select("id, student_id, case_id, encounter_status, note_type, due_at, created_at")
+      .eq("classroom_id", access.classroom.id)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    if (!assignments?.length) return response.json({ assignments: [] });
+
+    const caseIds = [...new Set(assignments.map((item) => item.case_id))];
+    const studentIds = [...new Set(assignments.map((item) => item.student_id))];
+    const assignmentIds = assignments.map((item) => item.id);
+
+    const [casesResult, studentsResult, notesResult] = await Promise.all([
+      learning.from("cases").select("id, title, patient_name").in("id", caseIds),
+      admin.from("profiles").select("id, first_name, last_name").in("id", studentIds),
+      learning
+        .from("notes")
+        .select("assignment_id, status, updated_at")
+        .in("assignment_id", assignmentIds)
+        .order("updated_at", { ascending: false }),
+    ]);
+    const queryError = casesResult.error || studentsResult.error || notesResult.error;
+    if (queryError) throw queryError;
+
+    const casesById = new Map((casesResult.data || []).map((item) => [item.id, item]));
+    const namesById = new Map(
+      (studentsResult.data || []).map((item) => [
+        item.id,
+        `${item.first_name || ""} ${item.last_name || ""}`.trim(),
+      ]),
+    );
+    const noteStatusByAssignment = new Map();
+    for (const note of notesResult.data || []) {
+      if (!noteStatusByAssignment.has(note.assignment_id)) {
+        noteStatusByAssignment.set(note.assignment_id, note.status); // newest first
+      }
+    }
+
+    // One row per case, with its students underneath
+    const byCase = new Map();
+    for (const item of assignments) {
+      const patientCase = casesById.get(item.case_id);
+      const entry = byCase.get(item.case_id) || {
+        caseId: item.case_id,
+        title: patientCase?.title || "Untitled case",
+        patientName: patientCase?.patient_name || "Unknown patient",
+        noteType: item.note_type,
+        dueAt: item.due_at,
+        createdAt: item.created_at,
+        students: [],
+      };
+      entry.students.push({
+        assignmentId: item.id,
+        name: namesById.get(item.student_id) || "Unknown student",
+        encounterStatus: item.encounter_status,
+        noteStatus: noteStatusByAssignment.get(item.id) || "Not started",
+      });
+      byCase.set(item.case_id, entry);
+    }
+
+    return response.json({ assignments: [...byCase.values()] });
+  } catch (error) {
+    console.error("Unable to load assigned cases:", error.message || error);
+    return response.status(500).json({ message: "Unable to load assigned cases." });
+  }
+});
+
 // GET /api/instructor/patients
 // Retrieve existing patients with their demographic records.
 instructorRouter.get("/patients", async (request, response) => {
@@ -1210,5 +1498,77 @@ instructorRouter.get("/patients/:patientId", async (request, response) => {
   }
 });
 
+// ---- Assignment drafts (instructor-only) ----
+instructorRouter.get("/drafts", async (request, response) => {
+  try {
+    const context = await requireInstructor(request, response);
+    if (!context) return;
+    const { data, error } = await context.supabaseAdmin
+      .schema("learning")
+      .from("assignment_drafts")
+      .select("id, classroom_id, title, payload, updated_at")
+      .eq("instructor_id", context.profile.id)
+      .order("updated_at", { ascending: false });
+    if (error) throw error;
+    return response.json({ drafts: data || [] });
+  } catch (error) {
+    console.error("Unable to load drafts:", error.message || error);
+    return response.status(500).json({ message: "Unable to load drafts." });
+  }
+});
+
+instructorRouter.post("/drafts", async (request, response) => {
+  try {
+    const context = await requireInstructor(request, response);
+    if (!context) return;
+    const { supabaseAdmin: admin, profile } = context;
+    const { id, classroomId, title, payload } = request.body || {};
+
+    if (!payload || typeof payload !== "object" || JSON.stringify(payload).length > 60000) {
+      return response.status(400).json({ message: "Draft is empty or too large." });
+    }
+    // A draft may only point at a class this instructor teaches
+    if (classroomId && !(await verifyClassroomAccess(admin, profile, classroomId))) {
+      return response.status(404).json({ message: "Classroom not found." });
+    }
+
+    const row = {
+      instructor_id: profile.id,
+      classroom_id: classroomId || null,
+      title: cleanText(title, 120) || null,
+      payload,
+      updated_at: new Date().toISOString(),
+    };
+    const table = admin.schema("learning").from("assignment_drafts");
+    const query = id
+      ? table.update(row).eq("id", id).eq("instructor_id", profile.id)
+      : table.insert(row);
+    const { data, error } = await query.select("id").maybeSingle();
+    if (error) throw error;
+    if (!data) return response.status(404).json({ message: "Draft not found." });
+    return response.status(id ? 200 : 201).json({ id: data.id, message: "Draft saved." });
+  } catch (error) {
+    console.error("Unable to save draft:", error.message || error);
+    return response.status(500).json({ message: "Unable to save the draft." });
+  }
+});
+
+instructorRouter.delete("/drafts/:id", async (request, response) => {
+  try {
+    const context = await requireInstructor(request, response);
+    if (!context) return;
+    const { error } = await context.supabaseAdmin
+      .schema("learning")
+      .from("assignment_drafts")
+      .delete()
+      .eq("id", request.params.id)
+      .eq("instructor_id", context.profile.id);
+    if (error) throw error;
+    return response.json({ message: "Draft deleted." });
+  } catch (error) {
+    console.error("Unable to delete draft:", error.message || error);
+    return response.status(500).json({ message: "Unable to delete the draft." });
+  }
+});
 
 export default instructorRouter;

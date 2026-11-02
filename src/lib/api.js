@@ -256,6 +256,36 @@ export function addInstructorGroupMembers(classroomId, groupId, studentIds) {
   });
 }
 
+export function assignInstructorCase(classroomId, assignment) {
+  return instructorRequest(`/classrooms/${classroomId}/assignments`, {
+    method: "POST",
+    body: JSON.stringify(assignment),
+  });
+}
+
+export function updateInstructorDueDate(classroomId, caseId, body) {
+  return instructorRequest(`/classrooms/${classroomId}/cases/${caseId}/due-date`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchInstructorDrafts() {
+  return instructorRequest("/drafts");
+}
+
+export function saveInstructorDraft(draft) {
+  return instructorRequest("/drafts", { method: "POST", body: JSON.stringify(draft) });
+}
+
+export function deleteInstructorDraft(id) {
+  return instructorRequest(`/drafts/${id}`, { method: "DELETE" });
+}
+
+export function fetchInstructorAssignments(classroomId) {
+  return instructorRequest(`/classrooms/${classroomId}/assignments`);
+}
+
 export async function fetchAdminPatients() {
   //Get the login token from session storage
   const accessToken = sessionStorage.getItem("careflow-access-token");
