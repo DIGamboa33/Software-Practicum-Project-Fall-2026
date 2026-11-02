@@ -130,7 +130,7 @@ function ChipSlot({ label, items, setItems, placeholder }) {
           placeholder={placeholder}
           value={draft}
         />
-        <button aria-label={`Add ${label}`} className="chip-add__button" onClick={addDraft} type="button">+</button>
+        <button aria-label={`Add ${label} item`} className="chip-add__button" onClick={addDraft} type="button">+</button>
       </div>
 
       {hidden.length > 0 && (
@@ -179,6 +179,7 @@ function AssignCaseModal({ classrooms, initialDetail, onClose, onAssigned }) {
   const [error, setError] = useState("");
   const [draftId, setDraftId] = useState(null);
   const [drafts, setDrafts] = useState([]);
+  const [notice, setNotice] = useState("");
 
   const students = detail?.students || [];
   const groups = detail?.groups || [];
@@ -292,23 +293,26 @@ function AssignCaseModal({ classrooms, initialDetail, onClose, onAssigned }) {
 
 
 
-  async function saveDraft() {
-    try {
+    async function saveDraft() {
+        try {
         setError("");
+        setNotice("");
         const result = await saveInstructorDraft({
-        id: draftId,
-        classroomId,
-        title: form.title || form.patientName || "Untitled draft",
-        payload: {
+            id: draftId,
+            classroomId,
+            title: form.title || form.patientName || "Untitled draft",
+            payload: {
             form, removed, medications, allergies, history, criteria,
             audience, groupId, individualIds, patientRecordId,
-        },
+            },
         });
         setDraftId(result.id);
         setDrafts((await fetchInstructorDrafts()).drafts || []);
-    } catch (draftError) {
+        setNotice("Draft saved.");
+        setTimeout(() => setNotice(""), 3000);
+        } catch (draftError) {
         setError(draftError.message);
-    }
+        }
     }
 
     function loadDraft(draft) {
@@ -471,7 +475,7 @@ function AssignCaseModal({ classrooms, initialDetail, onClose, onAssigned }) {
           </section>
 
           {/* 2. Patient */}
-          <section className="assign-modal__section">
+          <section className="panel assign-modal__section">
             <h3>Patient case</h3>
 
             <label>
@@ -558,7 +562,7 @@ function AssignCaseModal({ classrooms, initialDetail, onClose, onAssigned }) {
           </section>
 
           {/* 3. Note and due date */}
-          <section className="assign-modal__section">
+          <section className="panel assign-modal__section">
             <h3>Note and due date</h3>
             <div className="assign-grid">
               <label>
@@ -580,7 +584,7 @@ function AssignCaseModal({ classrooms, initialDetail, onClose, onAssigned }) {
           </section>
 
           {/* 4. Expected answers */}
-          <section className="assign-modal__section">
+          <section className="panel assign-modal__section">
             <h3>Expected answers and rubric</h3>
             <p className="create-class-form__hint">Only instructors can see the answer key.</p>
 
@@ -636,6 +640,7 @@ function AssignCaseModal({ classrooms, initialDetail, onClose, onAssigned }) {
         </div>
 
         <footer className="admin-form__actions">
+            {notice && <span className="draft-notice" role="status">{notice}</span>}
             <button className="secondary-button" disabled={saving} onClick={saveDraft} type="button">
                 Save draft
             </button>

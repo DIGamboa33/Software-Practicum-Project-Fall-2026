@@ -4109,3 +4109,13 @@ td small {
 .assign-slot--removed { opacity: .6; }
 
 @media (max-width: 640px) { .assign-grid { grid-template-columns: 1fr; } }
+
+.draft-notice {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 8px;
+  color: #1f6b5a;
+  background: #e6f6f1;
+  font-size: 12px;
+  font-weight: 600;
+}
