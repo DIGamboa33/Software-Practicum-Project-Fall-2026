@@ -11,7 +11,7 @@ import {
 
 const INSTRUCTORS = [
   { id: "demo-rivera", name: "Dr. Rivera" },
-  { id: "demo-instructor", name: "Demo Instructor" },
+  { id: "demo-john-doe", name: "John Doe" },
 ];
 
 const TEMPLATES = {
@@ -42,6 +42,7 @@ const TEMPLATES = {
       ]],
     ],
   },
+
   pharmacy_sbar: {
     label: "SBAR (Situation, Background, Assessment, Recommendation)",
     sections: [
@@ -66,7 +67,7 @@ const TEMPLATES = {
       ]],
     ],
   },
-  
+
   pharmacy_mtm: {
     label: "MTM (Medication Therapy Management)",
     sections: [
@@ -78,7 +79,6 @@ const TEMPLATES = {
         ["adherence", "Medication Adherence / Barriers"],
         ["clinicalFindings", "Relevant Vitals / Laboratory Results"],
       ]],
-
       ["Medication Review", [
         ["medicationReconciliation", "Medication Reconciliation Summary"],
         ["medicationDiscrepancies", "Medication Discrepancies"],
@@ -87,7 +87,6 @@ const TEMPLATES = {
         ["drugTherapyProblems", "Drug Therapy Problems Identified"],
         ["priorityProblems", "Priority / Clinical Significance"],
       ]],
-
       ["Medication Action Plan", [
         ["recommendations", "Pharmacist Recommendations"],
         ["medicationChanges", "Proposed Medication Changes"],
@@ -95,7 +94,6 @@ const TEMPLATES = {
         ["patientActions", "Patient Medication Action Plan"],
         ["providerCommunication", "Prescriber Communication"],
       ]],
-
       ["Follow-up", [
         ["monitoring", "Monitoring Parameters / Clinical Goals"],
         ["followUpDate", "Follow-up Date / Interval"],
@@ -104,7 +102,6 @@ const TEMPLATES = {
       ]],
     ],
   },
-
 };
 
 const VITALS = [
@@ -152,16 +149,25 @@ const blank = (fields) => ({
 });
 
 function mapDatabaseNote(note) {
-  const stored = note.content && typeof note.content === "object" ? note.content : {};
+  const stored =
+    note.content && typeof note.content === "object"
+      ? note.content
+      : {};
+
   return {
     id: note.id,
     title: note.title || stored.title || "Untitled Note",
     type: note.note_type || stored.type || "pharmacy_soap",
     status: note.status || "Draft",
-    content: stored.content && typeof stored.content === "object" ? stored.content : stored,
+    content:
+      stored.content && typeof stored.content === "object"
+        ? stored.content
+        : stored,
     vitals: stored.vitals || {},
     problems: Array.isArray(stored.problems) ? stored.problems : [],
-    medications: Array.isArray(stored.medications) ? stored.medications : [],
+    medications: Array.isArray(stored.medications)
+      ? stored.medications
+      : [],
     instructorId: stored.instructorId || "",
     instructorName: stored.instructorName || "",
     createdAt: note.created_at,
@@ -174,15 +180,23 @@ function mapDatabaseNote(note) {
 
 const shown = (value) => {
   if (value == null || value === "") return "Not provided";
-  if (Array.isArray(value)) return value.map(shown).join(", ") || "Not provided";
-  return typeof value === "object" ? JSON.stringify(value) : String(value);
+
+  if (Array.isArray(value)) {
+    return value.map(shown).join(", ") || "Not provided";
+  }
+
+  return typeof value === "object"
+    ? JSON.stringify(value)
+    : String(value);
 };
 
 const formatDate = (value) =>
   value ? new Date(value).toLocaleString() : "—";
 
 const locked = (note) =>
-  ["Pending Review", "Submitted", "Approved", "Signed"].includes(note?.status);
+  ["Pending Review", "Submitted", "Approved", "Signed"].includes(
+    note?.status
+  );
 
 const row = {
   display: "flex",
@@ -191,7 +205,10 @@ const row = {
   alignItems: "center",
 };
 
-const box = { padding: "1rem", marginBottom: "1rem" };
+const box = {
+  padding: "1rem",
+  marginBottom: "1rem",
+};
 
 const modal = {
   position: "fixed",
@@ -203,10 +220,22 @@ const modal = {
   padding: "1rem",
 };
 
-function Field({ label, value, change, type = "textarea", options, disabled }) {
+function Field({
+  label,
+  value,
+  change,
+  type = "textarea",
+  options,
+  disabled,
+}) {
   return (
-    <label className="detail-field" style={{ display: "block", marginBottom: "1rem" }}>
-      <span style={{ display: "block", marginBottom: 6 }}>{label}</span>
+    <label
+      className="detail-field"
+      style={{ display: "block", marginBottom: "1rem" }}
+    >
+      <span style={{ display: "block", marginBottom: 6 }}>
+        {label}
+      </span>
 
       {options ? (
         <select
@@ -215,9 +244,10 @@ function Field({ label, value, change, type = "textarea", options, disabled }) {
           onChange={(e) => change(e.target.value)}
         >
           {options.map((option) => {
-            const item = typeof option === "string"
-              ? { value: option, label: option }
-              : option;
+            const item =
+              typeof option === "string"
+                ? { value: option, label: option }
+                : option;
 
             return (
               <option key={item.value} value={item.value}>
@@ -261,7 +291,8 @@ export default function PharmacyNotesPage({
   embedded = false,
 }) {
   const [params] = useSearchParams();
-  const caseId = selectedCaseId ?? params.get("id") ?? params.get("caseId");
+  const caseId =
+    selectedCaseId ?? params.get("id") ?? params.get("caseId");
 
   const [patient, setPatient] = useState(null);
   const [notes, setNotes] = useState([]);
@@ -277,10 +308,14 @@ export default function PharmacyNotesPage({
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
+  const [showInstructorPicker, setShowInstructorPicker] = useState(false);
+  const [selectedInstructorId, setSelectedInstructorId] = useState("");
+
   const saved = notes.find((note) => note.id === draft?.id);
   const readOnly = locked(draft);
   const template = TEMPLATES[draft?.type] || TEMPLATES.pharmacy_soap;
-  const [sectionName, sectionFields] = template.sections[tab] || template.sections[0];
+  const [sectionName, sectionFields] =
+    template.sections[tab] || template.sections[0];
 
   const soap = draft?.type === "pharmacy_soap";
   const sbar = draft?.type === "pharmacy_sbar";
@@ -290,9 +325,10 @@ export default function PharmacyNotesPage({
   const problems = draft?.problems || [];
   const medications = draft?.medications || [];
 
-  const bmi = +vitals.height > 0 && +vitals.weight > 0
-    ? (+vitals.weight / (+vitals.height / 100) ** 2).toFixed(1)
-    : "";
+  const bmi =
+    +vitals.height > 0 && +vitals.weight > 0
+      ? (+vitals.weight / (+vitals.height / 100) ** 2).toFixed(1)
+      : "";
 
   const chart = [
     ["Chief Complaint", patient?.chief_complaint],
@@ -314,13 +350,17 @@ export default function PharmacyNotesPage({
         if (!caseId) throw new Error("No case selected.");
 
         const result = await fetchStudentCases();
-        const cases = Array.isArray(result) ? result : result?.cases || [];
+        const cases = Array.isArray(result)
+          ? result
+          : result?.cases || [];
 
-        const found = cases.find(
-          (item) => String(item.id) === String(caseId)
-        ) || cases.find(
-          (item) => String(item.assignment_id) === String(caseId)
-        );
+        const found =
+          cases.find(
+            (item) => String(item.id) === String(caseId)
+          ) ||
+          cases.find(
+            (item) => String(item.assignment_id) === String(caseId)
+          );
 
         if (!found) throw new Error("Case not found.");
         if (active) setPatient(found);
@@ -332,7 +372,10 @@ export default function PharmacyNotesPage({
     }
 
     load();
-    return () => { active = false; };
+
+    return () => {
+      active = false;
+    };
   }, [caseId]);
 
   useEffect(() => {
@@ -343,13 +386,18 @@ export default function PharmacyNotesPage({
     }
 
     let active = true;
+
     async function loadNotes() {
       setNotesLoading(true);
       setError("");
       setDraft(null);
       setEditor(null);
+
       try {
-        const records = await fetchStudentPharmacyNotes(patient.assignment_id);
+        const records = await fetchStudentPharmacyNotes(
+          patient.assignment_id
+        );
+
         if (active) setNotes(records.map(mapDatabaseNote));
       } catch (err) {
         if (active) {
@@ -360,12 +408,24 @@ export default function PharmacyNotesPage({
         if (active) setNotesLoading(false);
       }
     }
+
     loadNotes();
-    return () => { active = false; };
+
+    return () => {
+      active = false;
+    };
   }, [patient?.assignment_id]);
 
   async function persist(note, close = false) {
-    if (!patient?.assignment_id || !note || saving || locked(note)) return false;
+    if (
+      !patient?.assignment_id ||
+      !note ||
+      saving ||
+      locked(note)
+    ) {
+      return false;
+    }
+
     if (editor) {
       setError("Save or cancel the open editor first.");
       return false;
@@ -373,16 +433,25 @@ export default function PharmacyNotesPage({
 
     setSaving(true);
     setError("");
+
     try {
-      const title = note.title?.trim() || TEMPLATES[note.type]?.label || "Untitled Note";
+      const title =
+        note.title?.trim() ||
+        TEMPLATES[note.type]?.label ||
+        "Untitled Note";
+
       const noteContent = {
         content: note.content || {},
         vitals: note.vitals || {},
         problems: note.problems || [],
         medications: note.medications || [],
       };
+
       const record = note.fromDatabase
-        ? await updateStudentNote(note.id, { title, content: noteContent })
+        ? await updateStudentNote(note.id, {
+            title,
+            content: noteContent,
+          })
         : await saveStudentNote({
             assignmentId: patient.assignment_id,
             discipline: "Pharmacy",
@@ -390,10 +459,19 @@ export default function PharmacyNotesPage({
             title,
             content: noteContent,
           });
+
       const updated = mapDatabaseNote(record);
-      setNotes((current) => [updated, ...current.filter((item) => String(item.id) !== String(updated.id))]);
+
+      setNotes((current) => [
+        updated,
+        ...current.filter(
+          (item) => String(item.id) !== String(updated.id)
+        ),
+      ]);
+
       setDraft(close ? null : updated);
       setMessage("Draft saved to database.");
+
       return true;
     } catch (err) {
       setError(err.message || "Unable to save note.");
@@ -404,127 +482,157 @@ export default function PharmacyNotesPage({
   }
 
   async function submitNote() {
-  if (!draft?.fromDatabase || !draft?.id) {
-    setError("Save this note before submitting.");
-    return;
-  }
-
-  if (draft.dirty) {
-    setError("Save your latest changes before submitting.");
-    return;
-  }
-
-  if (editor) {
-    setError("Save or cancel the open editor first.");
-    return;
-  }
-
-  if (!["Draft", "Returned"].includes(draft.status)) {
-    setError("This note cannot be submitted.");
-    return;
-  }
-
-  if (saving || submitting) return;
-
-  const confirmed = window.confirm(
-    "Submit this note for instructor review? You will not be able to edit it until your instructor returns it."
-  );
-
-  if (!confirmed) return;
-
-  setSubmitting(true);
-  setError("");
-  setMessage("");
-
-  try {
-    const result = await submitStudentPharmacyNote(draft.id);
-
-    const updated = mapDatabaseNote(result.note);
-
-    setNotes((current) =>
-      current.map((note) =>
-        String(note.id) === String(updated.id) ? updated : note
-      )
-    );
-
-    setDraft(updated);
-    setMessage("Note submitted for instructor review.");
-  } catch (err) {
-    setError(err.message || "Unable to submit note.");
-  } finally {
-    setSubmitting(false);
-  }
-}
-
-async function deleteDraft(note) {
-  if (!note || saving || deleting) return;
-
-  // Only drafts can be deleted.
-  if (note.status !== "Draft") {
-    setError("Only draft notes can be deleted.");
-    return;
-  }
-
-  const confirmed = window.confirm(
-    `Permanently delete "${note.title || "Untitled Note"}"? This cannot be undone.`
-  );
-
-  if (!confirmed) return;
-
-  // New notes that have never been saved only exist in React state.
-  if (!note.fromDatabase) {
-    setNotes((current) =>
-      current.filter((item) => String(item.id) !== String(note.id))
-    );
-
-    if (String(draft?.id) === String(note.id)) {
-      setDraft(null);
-      setEditor(null);
+    if (!draft?.fromDatabase || !draft?.id) {
+      setError("Save this note before submitting.");
+      return;
     }
 
-    setMessage("Unsaved draft discarded.");
-    return;
-  }
-
-  setDeleting(true);
-  setError("");
-  setMessage("");
-
-  try {
-    await deleteStudentPharmacyNote(note.id);
-
-    // Remove the deleted note from the list.
-    setNotes((current) =>
-      current.filter((item) => String(item.id) !== String(note.id))
-    );
-
-    // Close the editor if this was the open note.
-    if (String(draft?.id) === String(note.id)) {
-      setDraft(null);
-      setEditor(null);
+    if (draft.dirty) {
+      setError("Save your latest changes before submitting.");
+      return;
     }
 
-    setMessage("Draft deleted successfully.");
-  } catch (err) {
-    setError(err.message || "Unable to delete draft.");
-  } finally {
-    setDeleting(false);
+    if (editor) {
+      setError("Save or cancel the open editor first.");
+      return;
+    }
+
+    if (!["Draft", "Returned"].includes(draft.status)) {
+      setError("This note cannot be submitted.");
+      return;
+    }
+
+    if (saving || submitting) return;
+
+    const instructor = INSTRUCTORS.find(
+      (item) => item.id === selectedInstructorId
+    );
+
+    if (!instructor) {
+      setError("Select an instructor before submitting.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const result = await submitStudentPharmacyNote(draft.id);
+
+      // Display the hard-coded selection locally.
+      const updated = {
+        ...mapDatabaseNote(result.note),
+        instructorId: instructor.id,
+        instructorName: instructor.name,
+      };
+
+      setNotes((current) =>
+        current.map((note) =>
+          String(note.id) === String(updated.id)
+            ? updated
+            : note
+        )
+      );
+
+      setDraft(updated);
+      setShowInstructorPicker(false);
+      setMessage("Note submitted for instructor review.");
+    } catch (err) {
+      setError(err.message || "Unable to submit note.");
+    } finally {
+      setSubmitting(false);
+    }
   }
-}
+
+  async function deleteDraft(note) {
+    if (!note || saving || deleting) return;
+
+    if (note.status !== "Draft") {
+      setError("Only draft notes can be deleted.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Permanently delete "${note.title || "Untitled Note"}"? This cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    if (!note.fromDatabase) {
+      setNotes((current) =>
+        current.filter(
+          (item) => String(item.id) !== String(note.id)
+        )
+      );
+
+      if (String(draft?.id) === String(note.id)) {
+        setDraft(null);
+        setEditor(null);
+      }
+
+      setMessage("Unsaved draft discarded.");
+      return;
+    }
+
+    setDeleting(true);
+    setError("");
+    setMessage("");
+
+    try {
+      await deleteStudentPharmacyNote(note.id);
+
+      setNotes((current) =>
+        current.filter(
+          (item) => String(item.id) !== String(note.id)
+        )
+      );
+
+      if (String(draft?.id) === String(note.id)) {
+        setDraft(null);
+        setEditor(null);
+      }
+
+      setMessage("Draft deleted successfully.");
+    } catch (err) {
+      setError(err.message || "Unable to delete draft.");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   function update(patch) {
     if (readOnly || !draft || saving) return;
-    setDraft((current) => current ? { ...current, ...patch, dirty: true } : current);
+
+    setDraft((current) =>
+      current ? { ...current, ...patch, dirty: true } : current
+    );
+
     setMessage("Unsaved changes");
   }
 
   const contentField = (field, value) =>
-    update({ content: { ...content, [field]: value } });
+    update({
+      content: {
+        ...content,
+        [field]: value,
+      },
+    });
 
   const vitalField = (field, value) =>
-    update({ vitals: { ...vitals, [field]: value } });
+    update({
+      vitals: {
+        ...vitals,
+        [field]: value,
+      },
+    });
 
-  const fields = (list, values, change, disabled = readOnly) =>
+  const fields = (
+    list,
+    values,
+    change,
+    disabled = readOnly
+  ) =>
     list.map(([key, label]) => (
       <Field
         key={key}
@@ -536,25 +644,34 @@ async function deleteDraft(note) {
     ));
 
   function open(note) {
-    if (editor && !window.confirm("Discard open editor changes?")) return;
+    if (
+      editor &&
+      !window.confirm("Discard open editor changes?")
+    ) {
+      return;
+    }
 
-    setDraft(note ? {
-      ...note,
-      content: note.content || {},
-      vitals: note.vitals || {},
-      problems: note.problems || [],
-      medications: note.medications || [],
-    } : {
-      id: uid(),
-      fromDatabase: false,
-      title: "",
-      type: "pharmacy_soap",
-      status: "Draft",
-      content: {},
-      vitals: {},
-      problems: [],
-      medications: [],
-    });
+    setDraft(
+      note
+        ? {
+            ...note,
+            content: note.content || {},
+            vitals: note.vitals || {},
+            problems: note.problems || [],
+            medications: note.medications || [],
+          }
+        : {
+            id: uid(),
+            fromDatabase: false,
+            title: "",
+            type: "pharmacy_soap",
+            status: "Draft",
+            content: {},
+            vitals: {},
+            problems: [],
+            medications: [],
+          }
+    );
 
     setEditor(null);
     setTab(0);
@@ -568,7 +685,9 @@ async function deleteDraft(note) {
     const items = draft[kind] || [];
 
     const next = items.some((item) => item.id === value.id)
-      ? items.map((item) => item.id === value.id ? value : item)
+      ? items.map((item) =>
+          item.id === value.id ? value : item
+        )
       : [...items, value];
 
     update({ [kind]: next });
@@ -576,14 +695,22 @@ async function deleteDraft(note) {
   }
 
   function removeEntry(kind, id) {
-    if (!window.confirm(`Remove this ${kind.slice(0, -1)}?`)) return;
+    if (
+      !window.confirm(`Remove this ${kind.slice(0, -1)}?`)
+    ) {
+      return;
+    }
 
-    update({ [kind]: draft[kind].filter((item) => item.id !== id) });
+    update({
+      [kind]: draft[kind].filter((item) => item.id !== id),
+    });
   }
 
   function listEntries(kind, list, fieldList) {
     const isProblem = kind === "problems";
-    const title = isProblem ? "Clinical Problems" : "Medication Reconciliation / Review";
+    const title = isProblem
+      ? "Clinical Problems"
+      : "Medication Reconciliation / Review";
     const singular = isProblem ? "Problem" : "Medication";
 
     return (
@@ -595,10 +722,16 @@ async function deleteDraft(note) {
             <button
               type="button"
               className="secondary-button"
-              onClick={() => setEditor({
-                kind,
-                value: blank(isProblem ? [...PROBLEM, ...PLAN] : MEDICATION),
-              })}
+              onClick={() =>
+                setEditor({
+                  kind,
+                  value: blank(
+                    isProblem
+                      ? [...PROBLEM, ...PLAN]
+                      : MEDICATION
+                  ),
+                })
+              }
             >
               + Add {singular}
             </button>
@@ -609,16 +742,28 @@ async function deleteDraft(note) {
 
         {list.map((item, index) => (
           <div key={item.id} className="panel" style={box}>
-            <h4>{index + 1}. {item.name || "Untitled"}</h4>
+            <h4>
+              {index + 1}. {item.name || "Untitled"}
+            </h4>
 
-            <Details items={fieldList.map(([key, label]) => [label, item[key]])} />
+            <Details
+              items={fieldList.map(([key, label]) => [
+                label,
+                item[key],
+              ])}
+            />
 
             {!readOnly && !editor && (
               <div style={row}>
                 <button
                   type="button"
                   className="secondary-button"
-                  onClick={() => setEditor({ kind, value: { ...item } })}
+                  onClick={() =>
+                    setEditor({
+                      kind,
+                      value: { ...item },
+                    })
+                  }
                 >
                   Edit
                 </button>
@@ -642,15 +787,23 @@ async function deleteDraft(note) {
             {fields(
               fieldList,
               editor.value,
-              (key, value) => setEditor((current) => ({
-                ...current,
-                value: { ...current.value, [key]: value },
-              })),
+              (key, value) =>
+                setEditor((current) => ({
+                  ...current,
+                  value: {
+                    ...current.value,
+                    [key]: value,
+                  },
+                })),
               false
             )}
 
             <div style={row}>
-              <button type="button" className="primary-button" onClick={saveEntry}>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={saveEntry}
+              >
                 Save {singular}
               </button>
 
@@ -670,7 +823,11 @@ async function deleteDraft(note) {
 
   if (loading) {
     return (
-      <div className={embedded ? "" : "dashboard-page content-page"}>
+      <div
+        className={
+          embedded ? "" : "dashboard-page content-page"
+        }
+      >
         Loading notes...
       </div>
     );
@@ -678,7 +835,11 @@ async function deleteDraft(note) {
 
   if (!patient) {
     return (
-      <div className={embedded ? "" : "dashboard-page content-page"}>
+      <div
+        className={
+          embedded ? "" : "dashboard-page content-page"
+        }
+      >
         <p role="alert">{error || "Case not found."}</p>
 
         {!embedded && (
@@ -694,13 +855,23 @@ async function deleteDraft(note) {
   }
 
   return (
-    <div className={embedded ? "pharmacy-notes-embedded" : "dashboard-page content-page"}>
+    <div
+      className={
+        embedded
+          ? "pharmacy-notes-embedded"
+          : "dashboard-page content-page"
+      }
+    >
       {!embedded && (
         <section className="page-heading">
           <div>
-            <p className="section-label">Student Documentation</p>
+            <p className="section-label">
+              Student Documentation
+            </p>
             <h1>Pharmacy Notes</h1>
-            <p>{patient.patient_name} · {patient.title}</p>
+            <p>
+              {patient.patient_name} · {patient.title}
+            </p>
           </div>
 
           <div style={row}>
@@ -713,7 +884,9 @@ async function deleteDraft(note) {
 
             <button
               className="secondary-button"
-              onClick={() => onNavigate?.("caseDetail", { caseId })}
+              onClick={() =>
+                onNavigate?.("caseDetail", { caseId })
+              }
             >
               Back to Case
             </button>
@@ -728,7 +901,10 @@ async function deleteDraft(note) {
           <div className="case-section-heading">
             <h2>Existing Notes</h2>
 
-            <button className="primary-button" onClick={() => open(null)}>
+            <button
+              className="primary-button"
+              onClick={() => open(null)}
+            >
               + New Note
             </button>
           </div>
@@ -738,87 +914,102 @@ async function deleteDraft(note) {
           ) : !notes.length ? (
             <p>No notes created yet.</p>
           ) : (
-            
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                {[
-                  "Action",
-                  "Status",
-                  "Title",
-                  "Note Type",
-                  "Updated",
-                  "Instructor",
-                ].map((heading) => (
-                  <th key={heading}>{heading}</th>
-                ))}
-              </tr>
-            </thead>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    {[
+                      "Action",
+                      "Status",
+                      "Title",
+                      "Note Type",
+                      "Updated",
+                      "Instructor",
+                    ].map((heading) => (
+                      <th key={heading}>{heading}</th>
+                    ))}
+                  </tr>
+                </thead>
 
-            <tbody>
-              {notes.map((note) => (
-                <tr
-                  key={`${note.fromDatabase ? "db" : "local"}-${note.id}`}
-                >
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => open(note)}
+                <tbody>
+                  {notes.map((note) => (
+                    <tr
+                      key={`${
+                        note.fromDatabase ? "db" : "local"
+                      }-${note.id}`}
                     >
-                      {locked(note) ? "View" : "Continue"}
-                    </button>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => open(note)}
+                        >
+                          {locked(note) ? "View" : "Continue"}
+                        </button>
 
-                    {note.status === "Draft" && (
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        style={{
-                          marginLeft: "8px",
-                          color: "#dc2626",
-                          borderColor: "#dc2626",
-                        }}
-                        disabled={saving || deleting}
-                        onClick={() => deleteDraft(note)}
-                      >
-                        {deleting ? "Deleting..." : "Delete"}
-                      </button>
-                    )}
-                  </td>
+                        {note.status === "Draft" && (
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            style={{
+                              marginLeft: "8px",
+                              color: "#dc2626",
+                              borderColor: "#dc2626",
+                            }}
+                            disabled={saving || deleting}
+                            onClick={() => deleteDraft(note)}
+                          >
+                            {deleting
+                              ? "Deleting..."
+                              : "Delete"}
+                          </button>
+                        )}
+                      </td>
 
-                  <td>{note.status || "Draft"}</td>
+                      <td>{note.status || "Draft"}</td>
+                      <td>{note.title}</td>
 
-                  <td>{note.title}</td>
+                      <td>
+                        {TEMPLATES[note.type]?.label ||
+                          note.type}
+                      </td>
 
-                  <td>
-                    {TEMPLATES[note.type]?.label || note.type}
-                  </td>
-
-                  <td>{formatDate(note.updatedAt)}</td>
-
-
-                  <td>{note.instructorName || "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
+                      <td>{formatDate(note.updatedAt)}</td>
+                      <td>{note.instructorName || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
       ) : (
         <section className="panel data-panel">
           <div className="case-section-heading">
             <div>
-              <h2>{readOnly ? "View Note" : saved ? "Edit Note" : "New Note"}</h2>
+              <h2>
+                {readOnly
+                  ? "View Note"
+                  : saved
+                    ? "Edit Note"
+                    : "New Note"}
+              </h2>
               <small role="status">{message}</small>
             </div>
 
             <button
               className="secondary-button"
               onClick={() => {
-                if ((!draft.dirty || window.confirm("Discard unsaved changes?")) && (!editor || window.confirm("Discard open editor changes?"))) {
+                if (
+                  (!draft.dirty ||
+                    window.confirm(
+                      "Discard unsaved changes?"
+                    )) &&
+                  (!editor ||
+                    window.confirm(
+                      "Discard open editor changes?"
+                    ))
+                ) {
                   setDraft(null);
                   setEditor(null);
                 }
@@ -841,10 +1032,12 @@ async function deleteDraft(note) {
               label="Note Type"
               value={draft.type}
               disabled={readOnly || draft.fromDatabase}
-              options={Object.entries(TEMPLATES).map(([value, item]) => ({
-                value,
-                label: item.label,
-              }))}
+              options={Object.entries(TEMPLATES).map(
+                ([value, item]) => ({
+                  value,
+                  label: item.label,
+                })
+              )}
               change={(type) => {
                 if (type === draft.type) return;
 
@@ -863,19 +1056,25 @@ async function deleteDraft(note) {
           </div>
 
           <p>
-            <strong>Patient:</strong> {patient.patient_name} ·{" "}
+            <strong>Patient:</strong>{" "}
+            {patient.patient_name} ·{" "}
             <strong>Author:</strong>{" "}
-            {user?.full_name || user?.name || "Current Student"}
+            {user?.full_name ||
+              user?.name ||
+              "Current Student"}
           </p>
 
           <p>
-            <strong>Status:</strong> {draft.status || "Draft"}
-            {draft.instructorName && ` · Instructor: ${draft.instructorName}`}
-            {draft.submittedAt && ` · Submitted: ${formatDate(draft.submittedAt)}`}
+            <strong>Status:</strong>{" "}
+            {draft.status || "Draft"}
+            {draft.instructorName &&
+              ` · Instructor: ${draft.instructorName}`}
+            {draft.submittedAt &&
+              ` · Submitted: ${formatDate(draft.submittedAt)}`}
           </p>
 
           {draft.feedback && (
-            <div className="panel" style={{ padding: "1rem", marginBottom: "1rem" }}>
+            <div className="panel" style={box}>
               <h3>Instructor Feedback</h3>
 
               <p>
@@ -885,7 +1084,8 @@ async function deleteDraft(note) {
 
               <p>
                 <strong>Comments:</strong>{" "}
-                {draft.feedback.comments || "No comments provided."}
+                {draft.feedback.comments ||
+                  "No comments provided."}
               </p>
 
               <p>
@@ -896,7 +1096,10 @@ async function deleteDraft(note) {
           )}
 
           {readOnly && (
-            <p>This note is read-only while its status is <strong>{draft.status}</strong>.</p>
+            <p>
+              This note is read-only while its status is{" "}
+              <strong>{draft.status}</strong>.
+            </p>
           )}
 
           <nav aria-label="Note sections" style={row}>
@@ -904,7 +1107,11 @@ async function deleteDraft(note) {
               <button
                 key={name}
                 type="button"
-                className={tab === index ? "primary-button" : "secondary-button"}
+                className={
+                  tab === index
+                    ? "primary-button"
+                    : "secondary-button"
+                }
                 onClick={() => {
                   setEditor(null);
                   setTab(index);
@@ -929,11 +1136,11 @@ async function deleteDraft(note) {
           >
             <h3>{sectionName}</h3>
 
-            
             {mtm && tab === 0 && (
               <div className="panel" style={box}>
                 <h4>Patient Chart (Read-only)</h4>
                 <Details items={chart} />
+
                 <p>
                   <strong>Existing Clinical Results:</strong>{" "}
                   {shown(patient.results)}
@@ -941,19 +1148,17 @@ async function deleteDraft(note) {
               </div>
             )}
 
-
             {soap && tab === 0 && (
               <>
                 <div className="panel" style={box}>
                   <h4>Patient Chart (Read-only)</h4>
                   <Details items={chart} />
                 </div>
-                
+
                 <h4>Patient-Reported Information</h4>
               </>
             )}
 
-            
             {mtm && tab === 1 && (
               <>
                 <div className="panel" style={box}>
@@ -961,10 +1166,13 @@ async function deleteDraft(note) {
                   <Details items={chart} />
                 </div>
 
-                {listEntries("medications", medications, MEDICATION)}
+                {listEntries(
+                  "medications",
+                  medications,
+                  MEDICATION
+                )}
               </>
             )}
-
 
             {soap && tab === 1 && (
               <div className="panel" style={box}>
@@ -983,7 +1191,9 @@ async function deleteDraft(note) {
                       type="number"
                       value={vitals[key]}
                       disabled={readOnly}
-                      change={(value) => vitalField(key, value)}
+                      change={(value) =>
+                        vitalField(key, value)
+                      }
                     />
                   ))}
 
@@ -1001,11 +1211,22 @@ async function deleteDraft(note) {
             {soap && tab === 2 && (
               <>
                 <div className="panel" style={box}>
-                  <h4>Official Chart Diagnoses (Read-only)</h4>
-                  <p>{shown(patient.diagnoses ?? patient.diagnosis)}</p>
+                  <h4>
+                    Official Chart Diagnoses (Read-only)
+                  </h4>
+
+                  <p>
+                    {shown(
+                      patient.diagnoses ?? patient.diagnosis
+                    )}
+                  </p>
                 </div>
 
-                {listEntries("problems", problems, PROBLEM)}
+                {listEntries(
+                  "problems",
+                  problems,
+                  PROBLEM
+                )}
               </>
             )}
 
@@ -1014,13 +1235,21 @@ async function deleteDraft(note) {
                 <h4>Problem-Oriented Treatment Plans</h4>
 
                 {!problems.length && (
-                  <p>Add clinical problems in Assessment first.</p>
+                  <p>
+                    Add clinical problems in Assessment first.
+                  </p>
                 )}
 
                 {problems.map((problem, index) => (
-                  <div key={problem.id} className="panel" style={box}>
-                    <h4>Problem {index + 1}: {problem.name || "Untitled"}</h4>
-
+                  <div
+                    key={problem.id}
+                    className="panel"
+                    style={box}
+                  >
+                    <h4>
+                      Problem {index + 1}:{" "}
+                      {problem.name || "Untitled"}
+                    </h4>
 
                     {fields(PLAN, problem, (key, value) =>
                       update({
@@ -1033,7 +1262,6 @@ async function deleteDraft(note) {
                     )}
                   </div>
                 ))}
-
               </>
             )}
 
@@ -1044,7 +1272,11 @@ async function deleteDraft(note) {
               </div>
             )}
 
-            {fields(sectionFields, content, contentField)}
+            {fields(
+              sectionFields,
+              content,
+              contentField
+            )}
 
             {sbar && tab === 3 && (
               <div className="panel" style={box}>
@@ -1055,7 +1287,9 @@ async function deleteDraft(note) {
                   type="text"
                   value={content.communicatedWith}
                   disabled={readOnly}
-                  change={(value) => contentField("communicatedWith", value)}
+                  change={(value) =>
+                    contentField("communicatedWith", value)
+                  }
                 />
 
                 <Field
@@ -1069,7 +1303,9 @@ async function deleteDraft(note) {
                     "Secure Message",
                     "Other",
                   ]}
-                  change={(value) => contentField("communicationMethod", value)}
+                  change={(value) =>
+                    contentField("communicationMethod", value)
+                  }
                 />
 
                 <Field
@@ -1077,7 +1313,9 @@ async function deleteDraft(note) {
                   type="datetime-local"
                   value={content.communicationTime}
                   disabled={readOnly}
-                  change={(value) => contentField("communicationTime", value)}
+                  change={(value) =>
+                    contentField("communicationTime", value)
+                  }
                 />
               </div>
             )}
@@ -1085,7 +1323,11 @@ async function deleteDraft(note) {
 
           <div
             className="form-actions"
-            style={{ ...row, justifyContent: "space-between", marginTop: "1.5rem" }}
+            style={{
+              ...row,
+              justifyContent: "space-between",
+              marginTop: "1.5rem",
+            }}
           >
             <div style={row}>
               <button
@@ -1101,7 +1343,9 @@ async function deleteDraft(note) {
 
               <button
                 className="secondary-button"
-                disabled={tab === template.sections.length - 1}
+                disabled={
+                  tab === template.sections.length - 1
+                }
                 onClick={() => {
                   setEditor(null);
                   setTab(tab + 1);
@@ -1112,61 +1356,143 @@ async function deleteDraft(note) {
             </div>
 
             <div style={row}>
-
-            {!readOnly && (
-              <>
-              {draft?.status === "Draft" && (
-                <button
-                  type="button"
-                  className="secondary-button"
-                  style={{
-                    color: "#dc2626",
-                    borderColor: "#dc2626",
-                  }}
-                  disabled={saving || deleting}
-                  onClick={() => deleteDraft(draft)}
-                >
-                  {deleting ? "Deleting..." : "Delete Draft"}
-                </button>
-              )}
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={saving || submitting || notesLoading}
-                  onClick={() => persist(draft, false)}
-                >
-                  {saving ? "Saving..." : "Save Draft"}
-                </button>
-
-                {draft.fromDatabase &&
-                  ["Draft", "Returned"].includes(draft.status) && (
+              {!readOnly && (
+                <>
+                  {draft.status === "Draft" && (
                     <button
                       type="button"
-                      className="primary-button"
-                      disabled={
-                        saving ||
-                        submitting ||
-                        notesLoading ||
-                        draft.dirty ||
-                        Boolean(editor)
-                      }
-                      onClick={submitNote}
+                      className="secondary-button"
+                      style={{
+                        color: "#dc2626",
+                        borderColor: "#dc2626",
+                      }}
+                      disabled={saving || deleting}
+                      onClick={() => deleteDraft(draft)}
                     >
-                      {submitting ? "Submitting..." : "Submit for Review"}
+                      {deleting
+                        ? "Deleting..."
+                        : "Delete Draft"}
                     </button>
                   )}
-              </>
-            )}
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={
+                      saving || submitting || notesLoading
+                    }
+                    onClick={() => persist(draft, false)}
+                  >
+                    {saving ? "Saving..." : "Save Draft"}
+                  </button>
+
+                  {draft.fromDatabase &&
+                    ["Draft", "Returned"].includes(
+                      draft.status
+                    ) && (
+                      <button
+                        type="button"
+                        className="primary-button"
+                        disabled={
+                          saving ||
+                          submitting ||
+                          notesLoading ||
+                          draft.dirty ||
+                          Boolean(editor)
+                        }
+                        onClick={() => {
+                          setSelectedInstructorId("");
+                          setError("");
+                          setShowInstructorPicker(true);
+                        }}
+                      >
+                        {submitting
+                          ? "Submitting..."
+                          : "Submit for Review"}
+                      </button>
+                    )}
+                </>
+              )}
             </div>
           </div>
         </section>
+      )}
+
+      {showInstructorPicker && (
+        <div style={modal}>
+          <section
+            className="panel data-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="instructor-picker-title"
+            style={{
+              width: "100%",
+              maxWidth: 450,
+              boxSizing: "border-box",
+              padding: "1.5rem",
+            }}
+          >
+            <h2 id="instructor-picker-title">
+              Submit to instructor
+            </h2>
+
+            <p>
+              Choose an instructor. After submission, your note
+              will be read-only until returned for revision.
+            </p>
+
+            <Field
+              label="Instructor"
+              value={selectedInstructorId}
+              disabled={submitting}
+              options={[
+                { value: "", label: "Select an instructor" },
+                ...INSTRUCTORS.map((instructor) => ({
+                  value: instructor.id,
+                  label: instructor.name,
+                })),
+              ]}
+              change={(value) => {
+                setSelectedInstructorId(value);
+                setError("");
+              }}
+            />
+
+            {error && <p role="alert">{error}</p>}
+
+            <div style={row}>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={submitting}
+                onClick={() => {
+                  setShowInstructorPicker(false);
+                  setError("");
+                }}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                className="primary-button"
+                disabled={!selectedInstructorId || submitting}
+                onClick={() => submitNote()}
+              >
+                {submitting ? "Submitting..." : "Submit"}
+              </button>
+            </div>
+          </section>
+        </div>
       )}
 
       {showPatient && (
         <div
           style={modal}
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setShowPatient(false);
+            if (event.target === event.currentTarget) {
+              setShowPatient(false);
+            }
           }}
         >
           <section
@@ -1182,15 +1508,23 @@ async function deleteDraft(note) {
           >
             <h2>Patient Information</h2>
 
-            <Details items={[
-              ["Name", patient.patient_name],
-              ["Date of Birth", patient.date_of_birth ?? patient.dob],
-              ["MRN", patient.mrn ?? patient.medical_record_number],
-              ["Age", patient.patient_age],
-              ["Sex", patient.patient_sex],
-              ...chart,
-              ["Clinical Results", patient.results],
-            ]} />
+            <Details
+              items={[
+                ["Name", patient.patient_name],
+                [
+                  "Date of Birth",
+                  patient.date_of_birth ?? patient.dob,
+                ],
+                [
+                  "MRN",
+                  patient.mrn ?? patient.medical_record_number,
+                ],
+                ["Age", patient.patient_age],
+                ["Sex", patient.patient_sex],
+                ...chart,
+                ["Clinical Results", patient.results],
+              ]}
+            />
 
             <button
               className="secondary-button"
@@ -1201,7 +1535,6 @@ async function deleteDraft(note) {
           </section>
         </div>
       )}
-
     </div>
   );
 }
