@@ -11,6 +11,7 @@ import {
 
 const INSTRUCTORS = [
   { id: "demo-rivera", name: "Dr. Rivera" },
+  { id: "demo-john-doe", name: "John Doe" },
 ];
 
 const TEMPLATES = {
