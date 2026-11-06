@@ -335,6 +335,64 @@ adminRouter.get("/patients/:patientId", async (request, response) => {
       });
     }
 
+
+    // Get the patient's clinical information from Supabase.
+    // These tables are already used by the Instructor dashboard.
+    const portal = supabaseAdmin.schema("patient_portal");
+
+    const [
+      medicationsResult,
+      allergiesResult,
+      historyResult,
+      appointmentsResult,
+      vitalsResult,
+    ] = await Promise.all([
+      portal
+        .from("medications")
+        .select("*")
+        .eq("patient_id", patientId),
+
+      portal
+        .from("allergies")
+        .select("*")
+        .eq("profile_id", patientId),
+
+      portal
+        .from("medical_history")
+        .select("*")
+        .eq("profile_id", patientId),
+
+      portal
+        .from("appointments")
+        .select("*")
+        .eq("patient_id", patientId),
+
+      portal
+        .from("vitals")
+        .select("*")
+        .eq("patient_id", patientId),
+    ]);
+
+    // If one of the queries fails, report the error.
+    const clinicalError =
+      medicationsResult.error ||
+      allergiesResult.error ||
+      historyResult.error ||
+      appointmentsResult.error ||
+      vitalsResult.error;
+
+    if (clinicalError) {
+      console.error(
+        "Unable to load clinical records:",
+        clinicalError.message
+      );
+
+      return response.status(500).json({
+        message: "Unable to load patient clinical information.",
+      });
+    }
+
+
     const firstName = profile.first_name || "";
     const lastName = profile.last_name || "";
 
@@ -359,7 +417,17 @@ adminRouter.get("/patients/:patientId", async (request, response) => {
       sex: patientRecord?.sex || null,
       phone: patientRecord?.phone || null,
       address: patientRecord?.address || null,
+      
       primaryProvider: patientRecord?.primary_provider || null,
+      updatedAt: patientRecord?.updated_at || null,
+
+      // Clinical records
+      medications: medicationsResult.data || [],
+      allergies: allergiesResult.data || [],
+      medicalHistory: historyResult.data || [],
+      appointments: appointmentsResult.data || [],
+      vitals: vitalsResult.data || [],
+
     };
 
     return response.json(patient);
@@ -1282,7 +1350,7 @@ adminRouter.get("/global-audit-log", async (request, response) => {
     const start = (page - 1) * pageSize;
     const end = start + pageSize - 1;
 
-    
+
     // Derek's Global Audit Log search and filters.
 
     // Read the filters sent from React.
@@ -1441,11 +1509,11 @@ adminRouter.get("/global-audit-log", async (request, response) => {
           .select("id, first_name, last_name, roles(name)")
           .in("id", actorIds);
 
-    if (profileError) {
-      throw profileError;
-    }
+      if (profileError) {
+        throw profileError;
+      }
 
-    profiles = userProfiles || [];
+      profiles = userProfiles || [];
     }
 
     //Match the each profile to its User ID

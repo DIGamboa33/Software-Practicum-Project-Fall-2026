@@ -1,0 +1,280 @@
+
+/* Admin Patient Details */
+
+.admin-patient-detail {
+  padding-bottom: 40px;
+}
+
+/* Patient Header */
+
+.patient-chart-header {
+  padding: 26px;
+  margin-bottom: 20px;
+}
+
+.patient-chart-identity {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.patient-chart-avatar {
+  width: 66px;
+  height: 66px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #dff5ef;
+  color: #278c79;
+  font-size: 24px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.patient-chart-name {
+  flex: 1;
+  min-width: 180px;
+}
+
+.patient-chart-name h2 {
+  margin: 4px 0;
+  font-size: 25px;
+  color: #202c48;
+}
+
+.patient-chart-name > p:last-child {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #8793a9;
+  overflow-wrap: anywhere;
+}
+
+/* Account Status */
+
+.patient-chart-status {
+  padding: 8px 13px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.patient-chart-status.active {
+  background: #e2f8ee;
+  color: #23866e;
+}
+
+.patient-chart-status.inactive {
+  background: #fce9e9;
+  color: #b64f4f;
+}
+
+/* Summary Cards */
+
+.patient-chart-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 26px;
+}
+
+.patient-chart-stat {
+  padding: 20px;
+  background: #f7f9fc;
+  border: 1px solid #e6ebf3;
+  border-radius: 12px;
+}
+
+.patient-chart-stat strong {
+  display: block;
+  font-size: 27px;
+  color: #263452;
+  margin-bottom: 5px;
+}
+
+.patient-chart-stat span {
+  font-size: 12px;
+  color: #8290a5;
+}
+
+/* Two-Column Chart Layout */
+
+.patient-chart-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.patient-chart-main,
+.patient-chart-sidebar {
+  min-width: 0;
+}
+
+/* Clinical Panels */
+
+.patient-chart-panel {
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+.patient-chart-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 19px;
+}
+
+.patient-chart-panel-heading h2 {
+  margin: 0;
+  font-size: 19px;
+  color: #263452;
+}
+
+.patient-chart-panel-heading p {
+  font-size: 12px;
+  color: #8a95a9;
+  margin: 7px 0 0;
+  line-height: 1.5;
+}
+
+.patient-chart-count {
+  padding: 6px 10px;
+  background: #edf8f5;
+  color: #348f7c;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Clinical Tables */
+
+.patient-chart-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.patient-chart-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 12px;
+}
+
+.patient-chart-table th {
+  padding: 13px 12px;
+  color: #8793a8;
+  background: #f6f8fc;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.patient-chart-table td {
+  padding: 15px 12px;
+  border-bottom: 1px solid #edf0f5;
+  color: #44516e;
+  vertical-align: top;
+}
+
+.patient-chart-table tbody tr:hover {
+  background: #fafbfe;
+}
+
+.patient-chart-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Demographics and Account Fields */
+
+.patient-chart-info,
+.patient-chart-account-grid {
+  margin: 0;
+}
+
+.patient-chart-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 11px 0;
+  border-bottom: 1px solid #edf0f5;
+}
+
+.patient-chart-field:last-child {
+  border-bottom: none;
+}
+
+.patient-chart-field dt {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8995a8;
+}
+
+.patient-chart-field dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #34415d;
+  overflow-wrap: anywhere;
+}
+
+.patient-chart-account-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 28px;
+}
+
+/* Empty States */
+
+.patient-chart-empty {
+  padding: 20px;
+  background: #f8fafc;
+  border: 1px dashed #dce4ed;
+  border-radius: 10px;
+  color: #8591a5;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.patient-chart-note {
+  margin: 15px 0 0;
+  font-size: 11px;
+  color: #8995a8;
+}
+
+/* Responsive Layout */
+
+@media (max-width: 1100px) {
+  .patient-chart-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .patient-chart-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .patient-chart-header,
+  .patient-chart-panel {
+    padding: 18px;
+  }
+
+  .patient-chart-stats,
+  .patient-chart-account-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .patient-chart-identity {
+    align-items: flex-start;
+  }
+
+  .patient-chart-status {
+    margin-top: 5px;
+  }
+}
