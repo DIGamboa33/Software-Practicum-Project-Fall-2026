@@ -99,7 +99,13 @@ function getActionDescription(entry) {
       return "An administrator created a student account.";
 
     case "patient.viewed":
-      return "An administrator accessed a patient's medical chart.";
+      if (entry.actor_role === "Instructor") {
+        return "An instructor accessed a patient's chart.";
+      } else if (entry.actor_role === "Admin") {
+        return "An administrator accessed a patient's chart.";
+      } else {
+        return "A user accessed a patient's chart.";
+      }
 
     default:
       return `${getActionLabel(entry)} was recorded in the system.`;

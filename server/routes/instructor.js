@@ -1468,6 +1468,25 @@ instructorRouter.get("/patients/:patientId", async (request, response) => {
 
     if (queryError) throw queryError;
 
+
+    // Record when an Instructor successfully opens
+    // a patient's medical chart.
+    await writeAuditLog(admin, {
+      actor_id: context.profile.id,
+      target_user_id: profileId,
+      action: "patient.viewed",
+      entity_type: "patient",
+      entity_id: String(profileId),
+      details: {
+        result: "success",
+        view: "Instructor Patient Details",
+      },
+    });
+
+    // Do not cache sensitive patient information.
+    response.set("Cache-Control", "no-store");
+
+
     return response.json({
       patient: {
         id: patientRecord.id,
