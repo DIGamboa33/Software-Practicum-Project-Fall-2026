@@ -275,7 +275,7 @@ adminRouter.get("/patients/:patientId", async (request, response) => {
       return;
     }
 
-    const { supabaseAdmin } = adminContext;
+    const { supabaseAdmin, actor } = adminContext;
 
     // Get the patient ID from the URL.
     const patientId = request.params.patientId;
@@ -429,6 +429,23 @@ adminRouter.get("/patients/:patientId", async (request, response) => {
       vitals: vitalsResult.data || [],
 
     };
+
+    // Audit log will record when an admin
+    // successfully views a patient's medical chart
+    await writeAuditLog(supabaseAdmin, {
+      actor_id: actor.id,
+      target_user_id: patientId,
+      action: "patient.viewed",
+      entity_type: "patient",
+      entity_id: String(patientId),
+      details: {
+        result: "success",
+        view: "Admin Patient Details",
+      },
+    });
+    // Prevent browsers and proxies from caching
+    // sesnsitive patient response
+    response.set("Cache-Control", "no-store");
 
     return response.json(patient);
   } catch (error) {
@@ -1375,7 +1392,8 @@ adminRouter.get("/global-audit-log", async (request, response) => {
       "account.access_updated",
       "account.password_reset_requested",
       "classroom.created",
-      "student.bulk_invited"
+      "student.bulk_invited",
+      "patient.viewed",
     ];
 
     if (

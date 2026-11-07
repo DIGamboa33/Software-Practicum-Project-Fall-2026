@@ -27,7 +27,8 @@ function getActionLabel(entry) {
     "account.access_updated": "User Permissions Updated",
     "account.password_reset_requested": "Password Reset Requested",
     "classroom.created": "Classroom Created",
-    "student.bulk_invited": "Student Account Created"
+    "student.bulk_invited": "Student Account Created",
+    "patient.viewed": "Patient Chart Viewed",
   };
 
   // Instructor reviews can have two different outcomes.
@@ -96,6 +97,9 @@ function getActionDescription(entry) {
 
     case "student.bulk_invited":
       return "An administrator created a student account.";
+
+    case "patient.viewed":
+      return "An administrator accessed a patient's medical chart.";
 
     default:
       return `${getActionLabel(entry)} was recorded in the system.`;
@@ -346,6 +350,7 @@ function AdminGlobalAuditLogPage() {
 
               <option value="classroom.created">Classroom Created</option>
               <option value="student.bulk_invited">Student Account Created</option>
+              <option value="patient.viewed">Patient Chart Viewed</option>
             </select>
           </label>
 
