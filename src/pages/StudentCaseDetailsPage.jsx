@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import PharmacyNotesPage from "./PharmacyNotesPage";
+import VitalEntryForm from "../components/VitalEntryForm";
 import {
   fetchStudentCases,
   fetchStudentPharmacyNotes,
@@ -15,6 +16,7 @@ const TABS = [
   "Notes",
   "Appointments",
   "Referrals",
+  "Vitals",
 ];
 
 const STATUSES = [
@@ -345,10 +347,10 @@ export default function StudentCaseDetailPage({
 
   const vitals = Array.isArray(patient.vitals)
     ? sortRecent(patient.vitals, [
-        "recorded_at",
-        "measured_at",
-        "date",
-      ])[0]
+      "recorded_at",
+      "measured_at",
+      "date",
+    ])[0]
     : patient.vitals ?? patient.current_vitals;
 
   const allergies = patient.allergies;
@@ -383,8 +385,8 @@ export default function StudentCaseDetailPage({
       .filter((item) => {
         const date = new Date(
           item.scheduled_at ??
-            item.appointment_date ??
-            item.date
+          item.appointment_date ??
+          item.date
         ).getTime();
 
         return (
@@ -408,10 +410,10 @@ export default function StudentCaseDetailPage({
     [
       "Blood Pressure",
       vitals?.blood_pressure ??
-        (vitals?.systolic != null &&
+      (vitals?.systolic != null &&
         vitals?.diastolic != null
-          ? `${vitals.systolic}/${vitals.diastolic} mmHg`
-          : null),
+        ? `${vitals.systolic}/${vitals.diastolic} mmHg`
+        : null),
     ],
     ["Heart Rate", vitals?.heart_rate ?? vitals?.pulse],
     ["Temperature", vitals?.temperature],
@@ -575,9 +577,8 @@ export default function StudentCaseDetailPage({
                   width: "100%",
                   padding: "11px 8px",
                   textAlign: collapsed ? "center" : "left",
-                  border: `1px solid ${
-                    tab === item ? MINT : "#e5e9f0"
-                  }`,
+                  border: `1px solid ${tab === item ? MINT : "#e5e9f0"
+                    }`,
                   borderRadius: 9,
                   background:
                     tab === item ? MINT : "#f7f9fc",
@@ -801,8 +802,8 @@ export default function StudentCaseDetailPage({
                         Last recorded:{" "}
                         {formatDate(
                           vitals.recorded_at ??
-                            vitals.measured_at ??
-                            vitals.date
+                          vitals.measured_at ??
+                          vitals.date
                         )}
                       </p>
                     </>
@@ -875,8 +876,8 @@ export default function StudentCaseDetailPage({
                           label="Date"
                           value={formatDate(
                             nextAppointment.scheduled_at ??
-                              nextAppointment.appointment_date ??
-                              nextAppointment.date
+                            nextAppointment.appointment_date ??
+                            nextAppointment.date
                           )}
                         />
                         <Row
@@ -979,8 +980,8 @@ export default function StudentCaseDetailPage({
                     (item) =>
                       formatDate(
                         item.collected_at ??
-                          item.recorded_at ??
-                          item.date
+                        item.recorded_at ??
+                        item.date
                       ),
                   ],
                 ]}
@@ -994,6 +995,19 @@ export default function StudentCaseDetailPage({
                 </dl>
               )}
             </Card>
+          )}
+          {tab === "Vitals" && (
+            <div>
+              <VitalEntryForm
+                onSubmitVital={(newVitals) => {
+                  console.log("Submitted vitals payload:", newVitals);
+                  alert("Vitals captured successfully! Check console for payload.");
+                }}
+              />
+              <Card title="Historical Vitals">
+                <p className="case-help-text">Table of previous vital entries will go here.</p>
+              </Card>
+            </div>
           )}
 
           {tab === "Notes" && (
@@ -1023,8 +1037,8 @@ export default function StudentCaseDetailPage({
                     (item) =>
                       formatDate(
                         item.scheduled_at ??
-                          item.appointment_date ??
-                          item.date
+                        item.appointment_date ??
+                        item.date
                       ),
                   ],
                   [
