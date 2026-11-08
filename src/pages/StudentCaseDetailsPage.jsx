@@ -999,6 +999,7 @@ export default function StudentCaseDetailPage({
           {tab === "Vitals" && (
             <div>
               <VitalEntryForm
+              patientAge={patient.patient_age}
                 onSubmitVital={(newVitals) => {
                   console.log("Submitted vitals payload:", newVitals);
                   alert("Vitals captured successfully! Check console for payload.");

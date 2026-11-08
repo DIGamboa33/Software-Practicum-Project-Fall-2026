@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { evaluateVitals } from "../lib/vitalsvalidation";
 
-export default function VitalEntryForm({ onSubmitVital, onCancel }) {
+export default function VitalEntryForm({ patientAge = 30, onSubmitVital, onCancel }) {
   const [formData, setFormData] = useState({
     systolic: "",
     diastolic: "",
@@ -13,6 +14,8 @@ export default function VitalEntryForm({ onSubmitVital, onCancel }) {
     recorded_at: new Date().toISOString().slice(0, 16),
   });
 
+  const warnings = useMemo(() => evaluateVitals(formData, patientAge), [formData, patientAge]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -20,7 +23,7 @@ export default function VitalEntryForm({ onSubmitVital, onCancel }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmitVital?.(formData);
+    onSubmitVital?.({ ...formData, warnings });
   };
 
   return (
@@ -33,34 +36,47 @@ export default function VitalEntryForm({ onSubmitVital, onCancel }) {
         <div>
           <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Systolic (mmHg)</label>
           <input type="number" name="systolic" value={formData.systolic} onChange={handleChange} placeholder="120" style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ccc" }} />
+          {warnings.bp && <span style={{ color: "#d9534f", fontSize: 11, fontWeight: 600, display: "block", marginTop: 2 }}>⚠️ {warnings.bp}</span>}
         </div>
+
         <div>
           <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Diastolic (mmHg)</label>
           <input type="number" name="diastolic" value={formData.diastolic} onChange={handleChange} placeholder="80" style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ccc" }} />
         </div>
+
         <div>
           <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Heart Rate (bpm)</label>
           <input type="number" name="heart_rate" value={formData.heart_rate} onChange={handleChange} placeholder="72" style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ccc" }} />
+          {warnings.hr && <span style={{ color: "#d9534f", fontSize: 11, fontWeight: 600, display: "block", marginTop: 2 }}>⚠️ {warnings.hr}</span>}
         </div>
+
         <div>
           <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Temp (°F)</label>
           <input type="number" step="0.1" name="temperature" value={formData.temperature} onChange={handleChange} placeholder="98.6" style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ccc" }} />
+          {warnings.temperature && <span style={{ color: "#d9534f", fontSize: 11, fontWeight: 600, display: "block", marginTop: 2 }}>⚠️ {warnings.temperature}</span>}
         </div>
+
         <div>
           <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Resp Rate (/min)</label>
           <input type="number" name="respiratory_rate" value={formData.respiratory_rate} onChange={handleChange} placeholder="16" style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ccc" }} />
+          {warnings.respiratory_rate && <span style={{ color: "#d9534f", fontSize: 11, fontWeight: 600, display: "block", marginTop: 2 }}>⚠️ {warnings.respiratory_rate}</span>}
         </div>
+
         <div>
           <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>SpO2 (%)</label>
           <input type="number" name="spo2" value={formData.spo2} onChange={handleChange} placeholder="98" style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ccc" }} />
+          {warnings.spo2 && <span style={{ color: "#d9534f", fontSize: 11, fontWeight: 600, display: "block", marginTop: 2 }}>⚠️ {warnings.spo2}</span>}
         </div>
+
         <div>
           <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Weight (lbs)</label>
           <input type="number" step="0.1" name="weight_lbs" value={formData.weight_lbs} onChange={handleChange} placeholder="160" style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ccc" }} />
         </div>
+
         <div>
           <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Glucose (mg/dL)</label>
           <input type="number" name="blood_glucose_mg_dl" value={formData.blood_glucose_mg_dl} onChange={handleChange} placeholder="100" style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ccc" }} />
+          {warnings.blood_glucose_mg_dl && <span style={{ color: "#d9534f", fontSize: 11, fontWeight: 600, display: "block", marginTop: 2 }}>⚠️ {warnings.blood_glucose_mg_dl}</span>}
         </div>
       </div>
 
@@ -77,8 +93,3 @@ export default function VitalEntryForm({ onSubmitVital, onCancel }) {
     </form>
   );
 }
-
-
-
-  
- 
