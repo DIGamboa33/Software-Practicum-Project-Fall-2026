@@ -4,6 +4,63 @@ import { writeAuditLog } from "../services/auditLog.js";
 
 const studentRouter = Router();
 
+
+studentRouter.get("/rxnorm/search", async (req, res) => {
+  const token = req.headers.authorization?.replace(/^Bearer /, "");
+
+  if (!token) {
+    return res.status(401).json({ message: "Authentication required." });
+  }
+
+  const { data: { user }, error } =
+    await supabase.auth.getUser(token);
+
+  if (error || !user) {
+    return res.status(401).json({ message: "Invalid session." });
+  }
+
+  const name = typeof req.query.name === "string"
+    ? req.query.name.trim()
+    : "";
+
+  if (name.length < 2 || name.length > 100) {
+    return res.status(400).json({ message: "Invalid drug name." });
+  }
+
+  try {
+    const url = new URL("https://rxnav.nlm.nih.gov/REST/drugs.json");
+    url.searchParams.set("name", name);
+
+    const result = await fetch(url, {
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!result.ok) throw new Error("RxNorm unavailable");
+
+    const data = await result.json();
+
+    const medications = (data.drugGroup?.conceptGroup ?? [])
+      .filter((group) => ["SCD", "SBD"].includes(group.tty))
+      .flatMap((group) =>
+        (group.conceptProperties ?? []).map((drug) => ({
+          rxcui: drug.rxcui,
+          name: drug.name,
+          type: group.tty,
+        }))
+      )
+      .filter((drug) => drug.rxcui && drug.name)
+      .slice(0, 50);
+
+    res.json(medications);
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({
+      message: "RxNorm search unavailable.",
+    });
+  }
+});
+
+
 const NOTE_TYPES = {
   Pharmacy: ["pharmacy_soap", "pharmacy_sbar", "pharmacy_mtm"]
 };

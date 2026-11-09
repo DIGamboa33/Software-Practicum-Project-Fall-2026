@@ -900,3 +900,22 @@ export async function fetchPatientRecord() {
   return payload;
 }
 
+export async function searchRxNormMedications(name) {
+  const token = sessionStorage.getItem("careflow-access-token");
+
+  if (!token) throw new Error("Please sign in again.");
+
+  const response = await fetch(
+    `/api/student/rxnorm/search?name=${encodeURIComponent(name)}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Medication search failed.");
+  }
+
+  return data;
+}
+
