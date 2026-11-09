@@ -900,3 +900,21 @@ export async function fetchPatientRecord() {
   return payload;
 }
 
+
+
+/**
+ * Search current RxNorm clinical and branded drug products.
+ * This is read-only and does not change patient medication records.
+ */
+export async function searchRxNormDrugs(name) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) throw new Error("No active session. Please sign in again.");
+
+  const response = await fetch(
+    `/api/student/rxnorm/search?name=${encodeURIComponent(name)}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message || "Unable to search RxNorm.");
+  return payload;
+}
