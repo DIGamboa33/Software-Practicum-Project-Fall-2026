@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import PharmacyNotesPage from "./PharmacyNotesPage";
+import RxNormLookup from "../components/RxNormLookup";
 import {
   fetchStudentCases,
   fetchStudentPharmacyNotes,
@@ -947,9 +948,12 @@ export default function StudentCaseDetailPage({
           )}
 
           {tab === "Medications" && (
-            <Card title="Medications">
-              <Value value={patient.medications} />
-            </Card>
+            <>
+              <Card title="Current Medications">
+                <Value value={patient.medications} />
+              </Card>
+              <RxNormLookup />
+            </>
           )}
 
           {tab === "Labs" && (
