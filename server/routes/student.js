@@ -4,6 +4,58 @@ import { writeAuditLog } from "../services/auditLog.js";
 
 const studentRouter = Router();
 
+
+/**
+ * Read-only RxNorm search for educational medication lookups.
+ * No patient data is sent to RxNav; only the entered drug name.
+ */
+studentRouter.get("/rxnorm/search", async (request, response) => {
+  const authorization = request.headers.authorization;
+  if (!authorization?.startsWith("Bearer ")) {
+    return response.status(401).json({ message: "Authentication required." });
+  }
+
+  const { data: { user }, error: authError } =
+    await supabase.auth.getUser(authorization.slice(7));
+  if (authError || !user) {
+    return response.status(401).json({ message: "Invalid or expired session." });
+  }
+
+  const name = typeof request.query.name === "string" ? request.query.name.trim() : "";
+  if (name.length < 2 || name.length > 100) {
+    return response.status(400).json({ message: "Enter a drug name between 2 and 100 characters." });
+  }
+
+  try {
+    const url = new URL("https://rxnav.nlm.nih.gov/REST/drugs.json");
+    url.searchParams.set("name", name);
+    const upstream = await fetch(url, { signal: AbortSignal.timeout(10000) });
+
+    if (!upstream.ok) {
+      return response.status(502).json({ message: "RxNorm is temporarily unavailable." });
+    }
+
+    const payload = await upstream.json();
+    const products = (payload.drugGroup?.conceptGroup || [])
+      .filter((group) => ["SCD", "SBD"].includes(group.tty))
+      .flatMap((group) => group.conceptProperties || [])
+      .filter((item) => item.rxcui && item.name)
+      .map((item) => ({
+        rxcui: String(item.rxcui),
+        name: item.name,
+        tty: item.tty,
+      }));
+    const drugs = [...new Map(products.map((drug) => [drug.rxcui, drug])).values()]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 50);
+
+    return response.json({ drugs });
+  } catch (error) {
+    console.error("RxNorm search failed:", error);
+    return response.status(502).json({ message: "Unable to reach RxNorm. Try again later." });
+  }
+});
+
 const NOTE_TYPES = {
   Pharmacy: ["pharmacy_soap", "pharmacy_sbar", "pharmacy_mtm"]
 };
