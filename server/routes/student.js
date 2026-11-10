@@ -62,7 +62,13 @@ studentRouter.get("/rxnorm/search", async (req, res) => {
 
 
 const NOTE_TYPES = {
-  Pharmacy: ["pharmacy_soap", "pharmacy_sbar", "pharmacy_mtm"]
+  Pharmacy: [
+    "pharmacy_soap",
+    "pharmacy_sbar",
+    "pharmacy_mtm",
+    "pharmacy_phone",
+    "pharmacy_telehealth",
+  ],
 };
 
 studentRouter.get("/cases", async (request, response) => {
