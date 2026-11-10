@@ -102,6 +102,62 @@ const TEMPLATES = {
       ]],
     ],
   },
+
+  pharmacy_phone: {
+    label: "Phone Note",
+    sections: [
+      ["Call Details", [
+        ["communicationDate", "Date / Time of Call"],
+        ["caller", "Caller / Person Contacted"],
+        ["callDirection", "Call Direction"],
+        ["reason", "Reason for Call"],
+        ["summary", "Summary of Conversation"],
+        ["assessment", "Clinical Assessment / Findings"],
+        ["action", "Actions Taken / Recommendations"],
+        ["outcome", "Call Outcome / Response"],
+        ["followUp", "Follow-up Required"],
+      ]],
+    ],
+  },
+
+  pharmacy_telehealth: {
+    label: "Telehealth Visit Note",
+    sections: [
+      ["Visit Information", [
+        ["visitDate", "Visit Date / Time"],
+        ["platform", "Telehealth Platform / Method"],
+        ["participants", "Participants Present"],
+        ["patientLocation", "Patient Location"],
+        ["providerLocation", "Provider Location"],
+        ["consent", "Patient Consent for Telehealth"],
+        ["reason", "Reason for Visit"],
+      ]],
+
+      ["Subjective", [
+        ["chiefComplaint", "Chief Complaint"],
+        ["symptoms", "Patient-Reported Symptoms"],
+        ["medicalHistory", "Relevant Medical History"],
+        ["medications", "Current Medications"],
+        ["adherence", "Medication Adherence"],
+        ["patientConcerns", "Patient Concerns"],
+      ]],
+
+      ["Objective", [
+        ["vitals", "Patient-Reported Vitals"],
+        ["observations", "Visual / Remote Observations"],
+        ["limitations", "Limitations of Remote Assessment"],
+        ["availableResults", "Available Laboratory / Diagnostic Results"],
+      ]],
+
+      ["Assessment & Plan", [
+        ["assessment", "Clinical Assessment"],
+        ["recommendations", "Recommendations / Interventions"],
+        ["education", "Patient Education / Counseling"],
+        ["medicationChanges", "Medication Recommendations / Changes"],
+        ["followUp", "Follow-up / Next Steps"],
+      ]],
+    ],
+  },
 };
 
 const VITALS = [
