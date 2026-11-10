@@ -2919,7 +2919,8 @@ button {
   font-weight: 700;
 }
 .data-panel {
-  padding: 1;
+  padding: 24px;
+  min-width: 0;
   overflow: hidden;
 }
 .data-panel__toolbar {
