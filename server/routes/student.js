@@ -1437,4 +1437,94 @@ studentRouter.get("/classes/:classroomId", async (request, response) => {
 }
 
 );
+
+// GET vitals for a specific assignment
+studentRouter.get("/assignments/:assignmentId/vitals", async (request, response) => {
+  const authorization = request.headers.authorization;
+  if (!authorization?.startsWith("Bearer ")) {
+    return response.status(401).json({ message: "Authentication required." });
+  }
+
+  const accessToken = authorization.slice(7);
+  const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
+  if (authError || !user) {
+    return response.status(401).json({ message: "Invalid or expired session." });
+  }
+
+  try {
+    console.log("Vitals request", request)
+    const { assignmentId } = request.params;
+    const supabaseAdmin = getSupabaseAdmin();
+
+    const { data, error } = await supabaseAdmin
+      .schema("learning")
+      .from("vitals")
+      .select("*")
+      .eq("assignment_id", assignmentId)
+      .order("recorded_at", { ascending: false });
+
+    if (error) throw error;
+    return response.json(data);
+  } catch (err) {
+    console.error("Error fetching vitals endpoint:", err);
+    return response.status(500).json({ message: err.message });
+  }
+});
+
+// POST new vitals entry for an assignment
+studentRouter.post("/assignments/:assignmentId/vitals", async (request, response) => {
+  const authorization = request.headers.authorization;
+  if (!authorization?.startsWith("Bearer ")) {
+    return response.status(401).json({ message: "Authentication required." });
+  }
+
+  const accessToken = authorization.slice(7);
+  const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
+  if (authError || !user) {
+    return response.status(401).json({ message: "Invalid or expired session." });
+  }
+  console.log("Vitals request", request)
+  try {
+    const { assignmentId } = request.params;
+    const {
+      systolic,
+      diastolic,
+      heart_rate,
+      temperature,
+      respiratory_rate,
+      spo2,
+      weight_lbs,
+      blood_glucose_mg_dl,
+      recorded_at,
+    } = request.body;
+
+    const supabaseAdmin = getSupabaseAdmin();
+
+    const { data, error } = await supabaseAdmin
+      .schema("learning")
+      .from("vitals")
+      .insert([
+        {
+          assignment_id: assignmentId,
+          systolic: systolic ? parseInt(systolic, 10) : null,
+          diastolic: diastolic ? parseInt(diastolic, 10) : null,
+          heart_rate: heart_rate ? parseInt(heart_rate, 10) : null,
+          temperature: temperature ? parseFloat(temperature) : null,
+          respiratory_rate: respiratory_rate ? parseInt(respiratory_rate, 10) : null,
+          spo2: spo2 ? parseInt(spo2, 10) : null,
+          weight_lbs: weight_lbs ? parseFloat(weight_lbs) : null,
+          blood_glucose_mg_dl: blood_glucose_mg_dl ? parseInt(blood_glucose_mg_dl, 10) : null,
+          recorded_at: recorded_at || new Date().toISOString(),
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return response.status(201).json(data);
+  } catch (err) {
+    console.error("Error creating vitals endpoint:", err);
+    return response.status(500).json({ message: err.message });
+  }
+});
 export default studentRouter;

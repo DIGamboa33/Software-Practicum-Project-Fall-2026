@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import PharmacyNotesPage from "./PharmacyNotesPage";
 import VitalEntryForm from "../components/VitalEntryForm";
+import VitalsDetailModal from "../components/VitalsDetailModal";
+import { fetchStudentVitals, createStudentVital } from "../lib/api";
 import {
   fetchStudentCases,
   fetchStudentPharmacyNotes,
@@ -33,6 +35,7 @@ const ACTIONS = {
   Roomed: "Start Encounter",
   "In progress": "Check Out",
 };
+
 
 const MINT = "#78e3d1";
 
@@ -131,7 +134,7 @@ function Row({ label, value }) {
   );
 }
 
-function DataTable({ columns, rows }) {
+function DataTable({ columns, rows, onRowClick }) {
   if (!rows.length) {
     return <p className="case-help-text">No records available.</p>;
   }
@@ -150,7 +153,13 @@ function DataTable({ columns, rows }) {
         </thead>
         <tbody>
           {rows.map((item, index) => (
-            <tr key={item.id ?? index}>
+            <tr 
+              key={item.id ?? index} 
+              {...(onRowClick ? {
+                onClick: () => onRowClick(item),
+                style: { cursor: "pointer" }
+              } : {})}
+            >
               {columns.map(([label, render]) => (
                 <td key={label}>{render(item)}</td>
               ))}
@@ -181,6 +190,8 @@ export default function StudentCaseDetailPage({
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState("");
   const [noteCount, setNoteCount] = useState(0);
+  const [vitalsList, setVitalsList] = useState([]);
+  const [selectedVitalModal, setSelectedVitalModal] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -262,6 +273,22 @@ export default function StudentCaseDetailPage({
       window.removeEventListener("notes-updated", loadNoteCount);
     };
   }, [patient?.assignment_id, tab]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadVitals() {
+      
+      if (!patient?.assignment_id) return;
+      try {
+        const data = await fetchStudentVitals(patient.assignment_id);
+        if (active) setVitalsList(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Failed to load vitals history:", err);
+      }
+    }
+    loadVitals();
+    return () => { active = false; };
+  }, [patient?.assignment_id]);
 
   async function advanceStatus() {
     const current =
@@ -352,6 +379,18 @@ export default function StudentCaseDetailPage({
       "date",
     ])[0]
     : patient.vitals ?? patient.current_vitals;
+  
+  const handleSaveVital = async (formData) => {
+    try {
+      // Strip out the transient local 'warnings' object before posting to DB
+      const { warnings, ...payload } = formData;
+      const savedRecord = await createStudentVital(patient.assignment_id, payload);
+      setVitalsList((prev) => [savedRecord, ...prev]);
+      alert("Vitals recorded successfully!");
+    } catch (err) {
+      setError("Failed to save vitals entry.");
+    }
+  };
 
   const allergies = patient.allergies;
   const medicalHistory =
@@ -996,18 +1035,39 @@ export default function StudentCaseDetailPage({
               )}
             </Card>
           )}
-          {tab === "Vitals" && (
+{tab === "Vitals" && (
             <div>
-              <VitalEntryForm
-              patientAge={patient.patient_age}
-                onSubmitVital={(newVitals) => {
-                  console.log("Submitted vitals payload:", newVitals);
-                  alert("Vitals captured successfully! Check console for payload.");
-                }}
+              <VitalEntryForm 
+                patientAge={patient.patient_age}
+                onSubmitVital={handleSaveVital} 
               />
               <Card title="Historical Vitals">
-                <p className="case-help-text">Table of previous vital entries will go here.</p>
+                <p className="case-help-text" style={{ marginBottom: 12 }}>Click any row to inspect full measurements and clinical warnings.</p>
+                <div style={{ cursor: "pointer" }}>
+                  <DataTable
+                    rows={vitalsList}
+                    onRowClick={(item) => setSelectedVitalModal(item)}
+                    columns={[
+                      ["Date", (item) => formatDate(item.recorded_at ?? item.created_at)],
+                      ["BP", (item) => item.systolic && item.diastolic ? `${item.systolic}/${item.diastolic} mmHg` : "Not recorded"],
+                      ["HR", (item) => item.heart_rate ? `${item.heart_rate} bpm` : "Not recorded"],
+                      ["Temp", (item) => item.temperature ? `${item.temperature} °F` : "Not recorded"],
+                      ["SpO2", (item) => item.spo2 ? `${item.spo2}%` : "Not recorded"],
+                      ["Resp Rate", (item) => item.respiratory_rate ? `${item.respiratory_rate}/min` : "Not recorded"],
+                      ["Weight", (item) => item.weight_lbs ? `${item.weight_lbs} lbs` : "Not recorded"],
+                      ["Glucose", (item) => item.blood_glucose_mg_dl ? `${item.blood_glucose_mg_dl} mg/dL` : "Not recorded"],
+                    ]}
+                  />
+                </div>
               </Card>
+
+              {selectedVitalModal && (
+                <VitalsDetailModal 
+                  vital={selectedVitalModal} 
+                  patientAge={patient.patient_age} 
+                  onClose={() => setSelectedVitalModal(null)} 
+                />
+              )}
             </div>
           )}
 
