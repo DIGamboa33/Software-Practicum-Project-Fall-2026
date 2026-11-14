@@ -191,6 +191,18 @@ export function assignAdminClassroomInstructor(classroomId, instructorId) {
   });
 }
 
+
+ // Remove an instructor from a classroom.
+export function removeAdminClassroomInstructor(classroomId, instructorId) {
+  return adminRequest(
+    `/academics/classrooms/${classroomId}/instructors/${instructorId}`,
+    {
+      method: "DELETE",
+    }
+  );
+}
+
+
 export function bulkInviteStudents(students) {
   return adminRequest("/students/bulk-invite", {
     method: "POST",
