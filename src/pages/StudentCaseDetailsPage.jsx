@@ -10,6 +10,7 @@ import {
   fetchStudentPharmacyNotes,
   updateStudentCaseStatus,
 } from "../lib/api";
+import StudentMedicationsPage from "./StudentMedicationsPage";
 
 const TABS = [
   "Overview",
@@ -991,9 +992,11 @@ export default function StudentCaseDetailPage({
           )}
 
           {tab === "Medications" && (
-            <Card title="Medications">
-              <Value value={patient.medications} />
-            </Card>
+            <StudentMedicationsPage
+              patient={patient}
+              medications={patient.medications}
+              assignmentId={patient.assignment_id}
+            />
           )}
 
           {tab === "Labs" && (
