@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { evaluateVitals } from "../lib/vitalsvalidation";
+import { evaluateVitals } from "../lib/vitalsValidation";
 
 export default function VitalEntryForm({ patientAge = 30, onSubmitVital, onCancel }) {
   const [formData, setFormData] = useState({

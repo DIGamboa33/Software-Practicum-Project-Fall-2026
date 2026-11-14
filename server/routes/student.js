@@ -1527,4 +1527,60 @@ studentRouter.post("/assignments/:assignmentId/vitals", async (request, response
     return response.status(500).json({ message: err.message });
   }
 });
+
+// DELETE a vitals entry by ID
+studentRouter.delete("/vitals/:vitalId", async (request, response) => {
+  const authorization = request.headers.authorization;
+  if (!authorization?.startsWith("Bearer ")) {
+    return response.status(401).json({ message: "Authentication required." });
+  }
+
+  const accessToken = authorization.slice(7);
+  const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
+  if (authError || !user) {
+    return response.status(401).json({ message: "Invalid or expired session." });
+  }
+
+  const { vitalId } = request.params;
+  const supabaseAdmin = getSupabaseAdmin();
+
+  // Find the vital record and its assignment
+  const { data: vital, error: vitalError } = await supabaseAdmin
+    .schema("learning")
+    .from("vitals")
+    .select("id, assignment_id")
+    .eq("id", vitalId)
+    .maybeSingle();
+
+  if (vitalError || !vital) {
+    return response.status(404).json({ message: "Vitals record not found." });
+  }
+
+  // Verify that the logged-in student owns the case assignment
+  const { data: assignment, error: assignmentError } = await supabaseAdmin
+    .schema("learning")
+    .from("student_case_assignments")
+    .select("id")
+    .eq("id", vital.assignment_id)
+    .eq("student_id", user.id)
+    .maybeSingle();
+
+  if (assignmentError || !assignment) {
+    return response.status(403).json({ message: "You do not have permission to delete this record." });
+  }
+
+  const { error: deleteError } = await supabaseAdmin
+    .schema("learning")
+    .from("vitals")
+    .delete()
+    .eq("id", vitalId);
+
+  if (deleteError) {
+    console.error("Unable to delete vital:", deleteError.message);
+    return response.status(500).json({ message: "Unable to delete vitals record." });
+  }
+
+  return response.json({ message: "Vitals record deleted successfully.", deletedId: vitalId });
+});
+
 export default studentRouter;

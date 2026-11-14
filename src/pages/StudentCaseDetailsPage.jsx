@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import PharmacyNotesPage from "./PharmacyNotesPage";
 import VitalEntryForm from "../components/VitalEntryForm";
 import VitalsDetailModal from "../components/VitalsDetailModal";
-import { fetchStudentVitals, createStudentVital } from "../lib/api";
+import { fetchStudentVitals, createStudentVital, deleteStudentVital } from "../lib/api";
 import {
   fetchStudentCases,
   fetchStudentPharmacyNotes,
@@ -390,6 +390,10 @@ export default function StudentCaseDetailPage({
     } catch (err) {
       setError("Failed to save vitals entry.");
     }
+  };
+  const handleDeleteVital = async (vitalId) => {
+    await deleteStudentVital(vitalId);
+    setVitalsList((prev) => prev.filter((item) => item.id !== vitalId));
   };
 
   const allergies = patient.allergies;
@@ -1065,7 +1069,8 @@ export default function StudentCaseDetailPage({
                 <VitalsDetailModal 
                   vital={selectedVitalModal} 
                   patientAge={patient.patient_age} 
-                  onClose={() => setSelectedVitalModal(null)} 
+                  onClose={() => setSelectedVitalModal(null)}
+                  onDelete={handleDeleteVital}
                 />
               )}
             </div>

@@ -1,11 +1,25 @@
-import { useMemo } from "react";
-import { evaluateVitals } from "../lib/vitalsvalidation";
+import { useMemo, useState } from "react";
+import { evaluateVitals } from "../lib/vitalsValidation";
 
-export default function VitalsDetailModal({ vital, patientAge = 30, onClose }) {
+export default function VitalsDetailModal({ vital, patientAge = 30, onClose, onDelete }) {
   if (!vital) return null;
 
+  const [deleting, setDeleting] = useState(false);
   const warnings = useMemo(() => evaluateVitals(vital, patientAge), [vital, patientAge]);
   const hasWarnings = Object.keys(warnings).length > 0;
+
+  const handleDelete = async () => {
+    if (!window.confirm("Are you sure you want to delete this vital entry?")) return;
+    try {
+      setDeleting(true);
+      await onDelete?.(vital.id);
+      onClose();
+    } catch (err) {
+      alert(err.message || "Failed to delete vital record.");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div style={{
@@ -53,7 +67,16 @@ export default function VitalsDetailModal({ vital, patientAge = 30, onClose }) {
           )}
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <button 
+            type="button" 
+            className="secondary-button" 
+            disabled={deleting}
+            onClick={handleDelete}
+            style={{ color: "#d9534f", borderColor: "#d9534f", padding: "8px 16px" }}
+          >
+            {deleting ? "Deleting..." : "Delete Record"}
+          </button>
           <button type="button" className="primary-button" onClick={onClose} style={{ padding: "8px 16px" }}>Close</button>
         </div>
       </div>

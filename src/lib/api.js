@@ -934,3 +934,22 @@ export async function createStudentVital(assignmentId, vitalPayload) {
   if (!response.ok) throw new Error(payload.message || "Failed to record vitals");
   return payload;
 }
+
+export async function deleteStudentVital(vitalId) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) {
+    throw new Error("No active session. Please sign in again.");
+  }
+
+  const response = await fetch(`/api/student/vitals/${encodeURIComponent(vitalId)}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.message || "Unable to delete vitals record.");
+  }
+  return payload;
+}
