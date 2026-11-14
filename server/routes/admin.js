@@ -417,7 +417,7 @@ adminRouter.get("/patients/:patientId", async (request, response) => {
       sex: patientRecord?.sex || null,
       phone: patientRecord?.phone || null,
       address: patientRecord?.address || null,
-      
+
       primaryProvider: patientRecord?.primary_provider || null,
       updatedAt: patientRecord?.updated_at || null,
 
@@ -1109,14 +1109,112 @@ adminRouter.post("/academics/classrooms/:classroomId/instructors", async (reques
       return response.status(400).json({ message: "Choose an Instructor with the same discipline as this classroom." });
     }
     const { error } = await school.from("classroom_instructors").insert({ classroom_id: classroom.id, instructor_id: profile.id, access_level: "co_instructor" });
-    if (error?.code === "23505") return response.status(400).json({ message: "This Instructor is already assigned to the classroom." });
+
+    if (error?.code === "23505") {
+      return response.status(400).json({
+        message: "This Instructor is already assigned to the classroom."
+      });
+    }
+
     if (error) throw error;
-    return response.status(201).json({ message: "Instructor assigned to classroom." });
+
+    // Record the successful instructor assignment.
+    try {
+      await writeAuditLog(context.supabaseAdmin, {
+        actor_id: context.actor.id,
+        target_user_id: instructorId,
+        action: "classroom.instructor_assigned",
+        entity_type: "classroom",
+        entity_id: String(classroom.id),
+        details: {
+          classroomId: classroom.id,
+          instructorId: instructorId,
+          accessLevel: "co_instructor"
+        }
+      });
+    } catch (auditError) {
+      console.error("Instructor assigned, but audit logging failed:", auditError);
+    }
+
+    return response.status(201).json({
+      message: "Instructor assigned to classroom."
+    });
+
   } catch (error) {
     console.error("Unable to assign instructor:", error);
     return response.status(500).json({ message: "Unable to assign instructor." });
   }
 });
+
+
+// Remove an instructor from a classroom.
+adminRouter.delete(
+  "/academics/classrooms/:classroomId/instructors/:instructorId",
+  async (request, response) => {
+    try {
+      // Only administrators can remove instructors.
+      const context = await requireAdmin(request, response);
+      if (!context) return;
+
+      const { classroomId, instructorId } = request.params;
+      const school = context.supabaseAdmin.schema("school");
+
+      // Check whether this instructor is assigned.
+      const { data: membership, error: lookupError } = await school
+        .from("classroom_instructors")
+        .select("access_level")
+        .eq("classroom_id", classroomId)
+        .eq("instructor_id", instructorId)
+        .maybeSingle();
+
+      if (lookupError) throw lookupError;
+
+      if (!membership) {
+        return response.status(404).json({
+          message: "Instructor is not assigned to this classroom."
+        });
+      }
+
+      // Remove the instructor's classroom membership.
+      const { error: deleteError } = await school
+        .from("classroom_instructors")
+        .delete()
+        .eq("classroom_id", classroomId)
+        .eq("instructor_id", instructorId);
+
+      if (deleteError) throw deleteError;
+
+      // Record the removal in our audit log.
+      try {
+        await writeAuditLog(context.supabaseAdmin, {
+          actor_id: context.actor.id,
+          target_user_id: instructorId,
+          action: "classroom.instructor_removed",
+          entity_type: "classroom",
+          entity_id: String(classroomId),
+          details: {
+            instructorId,
+            previousAccessLevel: membership.access_level
+          }
+        });
+      } catch (auditError) {
+        console.error("Instructor removed, but audit logging failed:", auditError);
+      }
+
+      return response.json({
+        message: "Instructor removed from classroom."
+      });
+
+    } catch (error) {
+      console.error("Unable to remove instructor:", error);
+
+      return response.status(500).json({
+        message: "Unable to remove instructor."
+      });
+    }
+  }
+);
+
 
 adminRouter.post("/users/invite", async (request, response) => {
   const firstName = String(request.body.firstName || "").trim();
