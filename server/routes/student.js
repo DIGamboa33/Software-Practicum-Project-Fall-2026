@@ -1452,7 +1452,7 @@ studentRouter.get("/assignments/:assignmentId/vitals", async (request, response)
   }
 
   try {
-    console.log("Vitals request", request)
+   
     const { assignmentId } = request.params;
     const supabaseAdmin = getSupabaseAdmin();
 
@@ -1483,7 +1483,7 @@ studentRouter.post("/assignments/:assignmentId/vitals", async (request, response
   if (authError || !user) {
     return response.status(401).json({ message: "Invalid or expired session." });
   }
-  console.log("Vitals request", request)
+  
   try {
     const { assignmentId } = request.params;
     const {
