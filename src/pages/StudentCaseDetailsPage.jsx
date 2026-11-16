@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import PharmacyNotesPage from "./PharmacyNotesPage";
 import VitalEntryForm from "../components/VitalEntryForm";
 import VitalsDetailModal from "../components/VitalsDetailModal";
+import StudentLabOrderForm from "../components/StudentLabOrderForm";
 import { fetchStudentVitals, createStudentVital, deleteStudentVital } from "../lib/api";
 import {
   fetchStudentCases,
@@ -1000,7 +1001,9 @@ export default function StudentCaseDetailPage({
           )}
 
           {tab === "Labs" && (
-            <Card title="Laboratory Results">
+            <div>
+              <StudentLabOrderForm assignmentId={patient.assignment_id}/>
+            <Card title="Laboratory Results & Orders">
               <DataTable
                 rows={labs}
                 columns={[
@@ -1041,6 +1044,7 @@ export default function StudentCaseDetailPage({
                 </dl>
               )}
             </Card>
+            </div>
           )}
 {tab === "Vitals" && (
             <div>
