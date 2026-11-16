@@ -1790,4 +1790,142 @@ studentRouter.delete("/lab-orders/:orderId", async (request, response) => {
   return response.json({ message: "Lab order deleted successfully.", deletedId: orderId });
 });
 
+// UPDATE LAB but only if DRAFT
+studentRouter.put("/lab-orders/:orderId", async (request, response) => {
+  const authorization = request.headers.authorization;
+  if (!authorization?.startsWith("Bearer ")) {
+    return response.status(401).json({ message: "Authentication required." });
+  }
+
+  const accessToken = authorization.slice(7);
+  const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
+  if (authError || !user) {
+    return response.status(401).json({ message: "Invalid or expired session." });
+  }
+
+  const { orderId } = request.params;
+  const {
+    test_code,
+    test_name,
+    category,
+    clinical_indication,
+    fasting_required,
+    specimen_type,
+    priority,
+    special_instructions,
+  } = request.body;
+
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { data: existing, error: fetchError } = await supabaseAdmin
+    .schema("learning")
+    .from("lab_orders")
+    .select("id, assignment_id, status")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (fetchError || !existing) {
+    return response.status(404).json({ message: "Lab order not found." });
+  }
+
+  if (existing.status !== "Draft") {
+    return response.status(400).json({ message: "Only draft lab orders can be modified." });
+  }
+
+  const { data: assignment, error: assignmentError } = await supabaseAdmin
+    .schema("learning")
+    .from("student_case_assignments")
+    .select("id")
+    .eq("id", existing.assignment_id)
+    .eq("student_id", user.id)
+    .maybeSingle();
+
+  if (assignmentError || !assignment) {
+    return response.status(403).json({ message: "Permission denied." });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .schema("learning")
+    .from("lab_orders")
+    .update({
+      test_code: test_code || null,
+      test_name: test_name?.trim() || existing.test_name,
+      category: category || "Chemistry",
+      clinical_indication: clinical_indication || null,
+      fasting_required: Boolean(fasting_required),
+      specimen_type: specimen_type || null,
+      priority: priority || "Routine",
+      special_instructions: special_instructions || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", orderId)
+    .select()
+    .single();
+
+  if (error) {
+    return response.status(500).json({ message: error.message });
+  }
+
+  return response.json(data);
+});
+
+// PATCH lab order status, submitting the order
+studentRouter.patch("/lab-orders/:orderId/status", async (request, response) => {
+  const authorization = request.headers.authorization;
+  if (!authorization?.startsWith("Bearer ")) {
+    return response.status(401).json({ message: "Authentication required." });
+  }
+
+  const accessToken = authorization.slice(7);
+  const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
+  if (authError || !user) {
+    return response.status(401).json({ message: "Invalid or expired session." });
+  }
+
+  const { orderId } = request.params;
+  const { status } = request.body;
+
+  if (!["Draft", "Submitted", "Ordered"].includes(status)) {
+    return response.status(400).json({ message: "Invalid order status." });
+  }
+
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { data: existing, error: fetchError } = await supabaseAdmin
+    .schema("learning")
+    .from("lab_orders")
+    .select("id, assignment_id")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (fetchError || !existing) {
+    return response.status(404).json({ message: "Lab order not found." });
+  }
+
+  const { data: assignment, error: assignmentError } = await supabaseAdmin
+    .schema("learning")
+    .from("student_case_assignments")
+    .select("id")
+    .eq("id", existing.assignment_id)
+    .eq("student_id", user.id)
+    .maybeSingle();
+
+  if (assignmentError || !assignment) {
+    return response.status(403).json({ message: "Permission denied." });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .schema("learning")
+    .from("lab_orders")
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq("id", orderId)
+    .select()
+    .single();
+
+  if (error) {
+    return response.status(500).json({ message: error.message });
+  }
+
+  return response.json(data);
+});
 export default studentRouter;

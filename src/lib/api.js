@@ -1027,3 +1027,37 @@ export async function deleteStudentLabOrder(orderId) {
   }
   return payload;
 }
+
+export async function updateStudentLabOrder(orderId, payload) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) throw new Error("No active session.");
+
+  const response = await fetch(`/api/student/lab-orders/${encodeURIComponent(orderId)}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || "Failed to update lab order");
+  return data;
+}
+
+export async function updateStudentLabOrderStatus(orderId, status) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) throw new Error("No active session.");
+
+  const response = await fetch(`/api/student/lab-orders/${encodeURIComponent(orderId)}/status`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ status }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || "Failed to update order status");
+  return data;
+}
