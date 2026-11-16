@@ -1000,15 +1000,10 @@ function InstructorReviewPage() {
               {/* Instructor review actions */}
               <div style={{ marginTop: "28px" }}>
                 <ReviewDecisionPanel
-                  assignmentId={
-                    details.assignmentId
-                  }
-                  status={
-                    details.note?.status
-                  }
-                  onReviewed={
-                    refreshAfterReview
-                  }
+                  assignmentId={details.assignmentId}
+                  status={details.note?.status}
+                  criteria={details.rubric || []}
+                  onReviewed={refreshAfterReview}
                 />
               </div>
             </>

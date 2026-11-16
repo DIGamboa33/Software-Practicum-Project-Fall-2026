@@ -787,6 +787,40 @@ instructorRouter.get("/submissions", async (request, response) => {
   }
 });
 
+// Checks submitted scores against the case's rubric.
+// Returns { rows, criteriaCount } or { error }.
+async function validateScores(admin, caseId, scores) {
+  const { data: criteria, error } = await admin
+    .schema("learning")
+    .from("rubric_criteria")
+    .select("id, description, max_points")
+    .eq("case_id", caseId);
+
+  if (error) throw error;
+
+  const byId = new Map(criteria.map((c) => [c.id, c]));
+  const rows = [];
+
+  for (const score of Array.isArray(scores) ? scores : []) {
+    const criterion = byId.get(Number(score.criterionId));
+    const points = Number(score.points);
+
+    if (!criterion) return { error: "Unknown rubric criterion." };
+    if (!Number.isFinite(points) || points < 0 || points > Number(criterion.max_points)) {
+      return {
+        error: `"${criterion.description}" must be between 0 and ${criterion.max_points}.`,
+      };
+    }
+
+    rows.push({
+      criterion_id: criterion.id,
+      points_awarded: points,
+      feedback: cleanText(score.feedback, 500) || null,
+    });
+  }
+
+  return { rows, criteriaCount: criteria.length };
+}
 
 instructorRouter.get(
   "/submissions/:assignmentId",
@@ -809,7 +843,7 @@ instructorRouter.get(
         });
       }
 
-      const [noteResult, ordersResult, studentResult, caseResult] =
+      const [noteResult, ordersResult, studentResult, caseResult, rubricResult] =
         await Promise.all([
           admin
             .schema("learning")
@@ -841,13 +875,21 @@ instructorRouter.get(
             .select("*")
             .eq("id", assignment.case_id)
             .maybeSingle(),
+
+          admin
+            .schema("learning")
+            .from("rubric_criteria")
+            .select("id, description, max_points, position")
+            .eq("case_id", assignment.case_id)
+            .order("position"),
         ]);
 
       const queryError =
         noteResult.error ||
         ordersResult.error ||
         studentResult.error ||
-        caseResult.error;
+        caseResult.error ||
+        rubricResult.error;
 
       if (queryError) throw queryError;
 
@@ -863,6 +905,7 @@ instructorRouter.get(
         orders: ordersResult.data || [],
         student: studentResult.data,
         patientCase: caseResult.data,
+        rubric: rubricResult.data || [],
       });
     } catch (error) {
       console.error("Unable to load submission:", error);
@@ -909,6 +952,21 @@ instructorRouter.patch(
         });
       }
 
+            const { rows: scoreRows, criteriaCount, error: scoreError } =
+        await validateScores(admin, assignment.case_id, request.body?.scores);
+
+      if (scoreError) {
+        return response.status(400).json({ message: scoreError });
+      }
+
+      // Approving means the grade is final, so every criterion needs points.
+      if (decision === "Approved" && scoreRows.length < criteriaCount) {
+        return response.status(400).json({
+          message: "Score every rubric criterion before approving.",
+        });
+      }
+
+
       const { data: note, error: noteError } =
         await admin
           .schema("learning")
@@ -949,9 +1007,20 @@ instructorRouter.patch(
         });
       }
 
-      // save the decision and comments, if this fails, undo the status
+      // Save the decision and comments. If anything fails, undo the status
       // change so a decision never exists without its record.
-      const { error: reviewError } = await admin
+      async function undoReview(reviewId) {
+        if (reviewId) {
+          await admin.schema("learning").from("note_reviews").delete().eq("id", reviewId);
+        }
+        await admin
+          .schema("learning")
+          .from("notes")
+          .update({ status: "Pending Review" })
+          .eq("id", reviewedNote.id);
+      }
+
+      const { data: review, error: reviewError } = await admin
         .schema("learning")
         .from("note_reviews")
         .insert({
@@ -959,15 +1028,28 @@ instructorRouter.patch(
           reviewer_id: profile.id,
           decision,
           comments: comments || null,
-        });
+        })
+        .select("id")
+        .single();
 
       if (reviewError) {
-        await admin
-          .schema("learning")
-          .from("notes")
-          .update({ status: "Pending Review" })
-          .eq("id", reviewedNote.id);
+        await undoReview(null);
         throw reviewError;
+      }
+
+      if (scoreRows.length > 0) {
+        const { error: saveScoresError } = await admin
+          .schema("learning")
+          .from("review_scores")
+          .upsert(
+            scoreRows.map((row) => ({ ...row, review_id: review.id })),
+            { onConflict: "review_id,criterion_id" }
+          );
+
+        if (saveScoresError) {
+          await undoReview(review.id);
+          throw saveScoresError;
+        }
       }
 
       //Dereks audit log for submission review
