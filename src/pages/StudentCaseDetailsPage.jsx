@@ -4,7 +4,10 @@ import { useSearchParams } from "react-router-dom";
 import PharmacyNotesPage from "./PharmacyNotesPage";
 import VitalEntryForm from "../components/VitalEntryForm";
 import VitalsDetailModal from "../components/VitalsDetailModal";
+import StudentLabOrderForm from "../components/StudentLabOrderForm";
+import LabOrderDetailModal from "../components/LabOrderDetailModal";
 import { fetchStudentVitals, createStudentVital, deleteStudentVital } from "../lib/api";
+import { fetchStudentLabOrders, updateStudentLabOrder, updateStudentLabOrderStatus, deleteStudentLabOrder } from "../lib/api";
 import {
   fetchStudentCases,
   fetchStudentPharmacyNotes,
@@ -155,8 +158,8 @@ function DataTable({ columns, rows, onRowClick }) {
         </thead>
         <tbody>
           {rows.map((item, index) => (
-            <tr 
-              key={item.id ?? index} 
+            <tr
+              key={item.id ?? index}
               {...(onRowClick ? {
                 onClick: () => onRowClick(item),
                 style: { cursor: "pointer" }
@@ -195,6 +198,8 @@ export default function StudentCaseDetailPage({
   const [noteCount, setNoteCount] = useState(0);
   const [vitalsList, setVitalsList] = useState([]);
   const [selectedVitalModal, setSelectedVitalModal] = useState(null);
+  const [ordersList, setOrdersList] = useState([])
+  const [selectedLabOrderModal, setSelectedLabOrderModal] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -283,7 +288,7 @@ export default function StudentCaseDetailPage({
   useEffect(() => {
     let active = true;
     async function loadVitals() {
-      
+
       if (!patient?.assignment_id) return;
       try {
         const data = await fetchStudentVitals(patient.assignment_id);
@@ -293,6 +298,21 @@ export default function StudentCaseDetailPage({
       }
     }
     loadVitals();
+    return () => { active = false; };
+  }, [patient?.assignment_id]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadLabOrders() {
+      if (!patient?.assignment_id) return;
+      try {
+        const data = await fetchStudentLabOrders(patient.assignment_id);
+        if (active) setOrdersList(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Failed to load lab orders history:", err);
+      }
+    }
+    loadLabOrders();
     return () => { active = false; };
   }, [patient?.assignment_id]);
 
@@ -385,10 +405,10 @@ export default function StudentCaseDetailPage({
       "date",
     ])[0]
     : patient.vitals ?? patient.current_vitals;
-  
+
   const handleSaveVital = async (formData) => {
     try {
-      // Strip out the transient local 'warnings' object before posting to DB
+
       const { warnings, ...payload } = formData;
       const savedRecord = await createStudentVital(patient.assignment_id, payload);
       setVitalsList((prev) => [savedRecord, ...prev]);
@@ -401,6 +421,26 @@ export default function StudentCaseDetailPage({
     await deleteStudentVital(vitalId);
     setVitalsList((prev) => prev.filter((item) => item.id !== vitalId));
   };
+
+  const handleOrderCreated = (newOrder) => {
+    setOrdersList((prev) => [newOrder, ...prev]);
+  };
+
+  const handleUpdateLabOrder = async (orderId, payload) => {
+    const updated = await updateStudentLabOrder(orderId, payload);
+    setOrdersList((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+  };
+
+  const handleSubmitLabOrderStatus = async (orderId, newStatus) => {
+    const updated = await updateStudentLabOrderStatus(orderId, newStatus);
+    setOrdersList((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+  };
+
+  const handleDeleteLabOrder = async (orderId) => {
+    await deleteStudentLabOrder(orderId);
+    setOrdersList((prev) => prev.filter((o) => o.id !== orderId));
+  };
+
 
   const allergies = patient.allergies;
   const medicalHistory =
@@ -1005,53 +1045,41 @@ export default function StudentCaseDetailPage({
           )}
 
           {tab === "Labs" && (
-            <Card title="Laboratory Results">
-              <DataTable
-                rows={labs}
-                columns={[
-                  [
-                    "Test",
-                    (item) =>
-                      item.test_name ?? item.name ?? "Lab",
-                  ],
-                  [
-                    "Result",
-                    (item) =>
-                      `${display(
-                        item.result ?? item.value
-                      )} ${item.unit || ""}`,
-                  ],
-                  [
-                    "Reference Range",
-                    (item) =>
-                      display(item.reference_range),
-                  ],
-                  [
-                    "Date",
-                    (item) =>
-                      formatDate(
-                        item.collected_at ??
-                        item.recorded_at ??
-                        item.date
-                      ),
-                  ],
-                ]}
-              />
-              {patient.results && (
-                <dl>
-                  <Row
-                    label="Existing Clinical Results"
-                    value={patient.results}
-                  />
-                </dl>
-              )}
-            </Card>
-          )}
-{tab === "Vitals" && (
             <div>
-              <VitalEntryForm 
+              <StudentLabOrderForm assignmentId={patient.assignment_id} />
+
+              <Card title="Active Lab Orders">
+                <p className="case-help-text" style={{ marginBottom: 12 }}>Click any order row to inspect, edit drafts, or submit orders.</p>
+                <DataTable
+                  rows={ordersList}
+                  onRowClick={(item) => setSelectedLabOrderModal(item)}
+                  columns={[
+                    ["Test Name", (item) => item.test_name],
+                    ["Category", (item) => item.category],
+                    ["Priority", (item) => item.priority],
+                    ["Status", (item) => <span className="status-badge">{item.status}</span>],
+                    ["Date", (item) => formatDate(item.ordered_at ?? item.created_at)],
+                  ]}
+                />
+              </Card>
+
+              {selectedLabOrderModal && (
+                <LabOrderDetailModal
+                  order={selectedLabOrderModal}
+                  onClose={() => setSelectedLabOrderModal(null)}
+                  onUpdate={handleUpdateLabOrder}
+                  onSubmitOrder={handleSubmitLabOrderStatus}
+                  onDelete={handleDeleteLabOrder}
+                />
+              )}
+            </div>
+          )}
+
+          {tab === "Vitals" && (
+            <div>
+              <VitalEntryForm
                 patientAge={patient.patient_age}
-                onSubmitVital={handleSaveVital} 
+                onSubmitVital={handleSaveVital}
               />
               <Card title="Historical Vitals">
                 <p className="case-help-text" style={{ marginBottom: 12 }}>Click any row to inspect full measurements and clinical warnings.</p>
@@ -1074,9 +1102,9 @@ export default function StudentCaseDetailPage({
               </Card>
 
               {selectedVitalModal && (
-                <VitalsDetailModal 
-                  vital={selectedVitalModal} 
-                  patientAge={patient.patient_age} 
+                <VitalsDetailModal
+                  vital={selectedVitalModal}
+                  patientAge={patient.patient_age}
                   onClose={() => setSelectedVitalModal(null)}
                   onDelete={handleDeleteVital}
                 />
