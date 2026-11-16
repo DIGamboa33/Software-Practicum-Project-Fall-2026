@@ -14,7 +14,7 @@ import Pagination from "../components/Pagination";
 import "./AdminGlobalAuditLogPage.css";
 
 
- // Convert database action names into readable labels.
+// Convert database action names into readable labels.
 function getActionLabel(entry) {
   const labels = {
     "note.created": "SOAP Note Created",
@@ -29,6 +29,8 @@ function getActionLabel(entry) {
     "classroom.created": "Classroom Created",
     "student.bulk_invited": "Student Account Created",
     "patient.viewed": "Patient Chart Viewed",
+    "classroom.instructor_assigned": "Instructor Assigned to Classroom",
+    "classroom.instructor_removed": "Instructor Removed from Classroom"
   };
 
   // Instructor reviews can have two different outcomes.
@@ -107,6 +109,12 @@ function getActionDescription(entry) {
         return "A user accessed a patient's chart.";
       }
 
+    case "classroom.instructor_assigned":
+      return "An administrator assigned an instructor to a classroom.";
+
+    case "classroom.instructor_removed":
+      return "An administrator removed an instructor from a classroom.";
+    
     default:
       return `${getActionLabel(entry)} was recorded in the system.`;
   }
@@ -132,8 +140,8 @@ function getDetailLabel(key) {
     email: "Email Address",
   };
 
-  return labels[key] || 
-  key.replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+  return labels[key] ||
+    key.replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
 
 }
 
@@ -186,8 +194,8 @@ function AdminGlobalAuditLogPage() {
     let isCurrent = true;
 
     fetchGlobalAuditLog(page, {
-        pageSize,
-        search: searchTerm,
+      pageSize,
+      search: searchTerm,
       role: selectedRole,
       action: selectedAction
     })
@@ -430,7 +438,7 @@ function AdminGlobalAuditLogPage() {
 
                       <td>
                         <strong>{getActionLabel(entry)}</strong>
-                        </td>
+                      </td>
 
                       <td>
                         <div className="audit-actor">

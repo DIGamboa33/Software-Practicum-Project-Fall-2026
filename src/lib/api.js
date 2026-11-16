@@ -191,6 +191,18 @@ export function assignAdminClassroomInstructor(classroomId, instructorId) {
   });
 }
 
+
+ // Remove an instructor from a classroom.
+export function removeAdminClassroomInstructor(classroomId, instructorId) {
+  return adminRequest(
+    `/academics/classrooms/${classroomId}/instructors/${instructorId}`,
+    {
+      method: "DELETE",
+    }
+  );
+}
+
+
 export function bulkInviteStudents(students) {
   return adminRequest("/students/bulk-invite", {
     method: "POST",
@@ -919,3 +931,57 @@ export async function searchRxNormMedications(name) {
   return data;
 }
 
+
+export async function fetchStudentVitals(assignmentId) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) {
+    throw new Error("No active session. Please sign in again.");
+  }
+
+  const response = await fetch(`/api/student/assignments/${assignmentId}/vitals`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message || "Failed to fetch vitals");
+  return payload;
+}
+
+export async function createStudentVital(assignmentId, vitalPayload) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) {
+    throw new Error("No active session. Please sign in again.");
+  }
+
+  const response = await fetch(`/api/student/assignments/${assignmentId}/vitals`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(vitalPayload),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message || "Failed to record vitals");
+  return payload;
+}
+
+export async function deleteStudentVital(vitalId) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) {
+    throw new Error("No active session. Please sign in again.");
+  }
+
+  const response = await fetch(`/api/student/vitals/${encodeURIComponent(vitalId)}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.message || "Unable to delete vitals record.");
+  }
+  return payload;
+}

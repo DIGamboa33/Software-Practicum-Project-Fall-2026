@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReviewDecisionPanel from "../components/ReviewDecisionPanel";
 import Icon from "../components/Icon";
 
@@ -402,6 +402,23 @@ function InstructorReviewPage() {
     useState(false);
   const [detailsError, setDetailsError] = useState("");
 
+    const dialogRef = useRef(null);
+
+  // Open or close the popup whenever a submission is selected
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    if (selectedAssignmentId !== null && !dialog.open) dialog.showModal();
+    if (selectedAssignmentId === null && dialog.open) dialog.close();
+  }, [selectedAssignmentId]);
+
+  function closeSubmission() {
+    setSelectedAssignmentId(null);
+    setDetails(null);
+    setDetailsError("");
+  }
+
   async function loadSubmissions() {
     setLoading(true);
     setError("");
@@ -478,13 +495,7 @@ function InstructorReviewPage() {
   }
 
   async function openSubmission(assignmentId) {
-    if (selectedAssignmentId === assignmentId) {
-      setSelectedAssignmentId(null);
-      setDetails(null);
-      setDetailsError("");
-      return;
-    }
-
+    
     setSelectedAssignmentId(assignmentId);
     setDetails(null);
     setDetailsError("");
@@ -913,108 +924,76 @@ function InstructorReviewPage() {
           )}
       </section>
 
-      {/* Expanded submission details */}
-      {selectedAssignmentId !== null && (
-        <section className="panel review-queue-panel">
-          <div className="panel__header">
-            <div>
-              <p className="section-label">
-                Student documentation
-              </p>
-
+            {/* Submission details popup */}
+      <dialog
+        ref={dialogRef}
+        className="assign-modal"
+        onClose={closeSubmission}
+        onClick={(event) => {
+          // clicking the dark backdrop closes the popup
+          if (event.target === event.currentTarget) closeSubmission();
+        }}
+        style={{
+          width: "min(960px, 94vw)", 
+          overflow: "hidden",
+          outline: "none",
+        }}
+      >
+        {selectedAssignmentId !== null && (
+          <div style={{ padding: "28px 32px", maxHeight: "90vh", overflowY: "auto" }}>
+            <header style={{ marginBottom: "16px" }}>
+              <p className="section-label">Student documentation</p>
               <h2>Submission Details</h2>
+            </header>
+
+            {detailsLoading && (
+              <p className="directory-loading">Loading documentation…</p>
+            )}
+
+            {detailsError && <p className="directory-error">{detailsError}</p>}
+
+            {!detailsLoading && details && (
+              <>
+                <div className="scope-rule">
+                  <strong>Student</strong>
+                  <span>{formatStudent(details.student)}</span>
+                </div>
+
+                <div className="scope-rule">
+                  <strong>Patient</strong>
+                  <span>{details.patientCase?.patient_name || "Unknown patient"}</span>
+                </div>
+
+                <div className="scope-rule">
+                  <strong>Case</strong>
+                  <span>{details.patientCase?.title || "Untitled case"}</span>
+                </div>
+
+                <div className="scope-rule">
+                  <strong>Status</strong>
+                  <span>{details.note?.status || "Unknown"}</span>
+                </div>
+
+                <NoteDetails note={details.note} />
+
+                <div style={{ marginTop: "28px" }}>
+                  <ReviewDecisionPanel
+                    assignmentId={details.assignmentId}
+                    status={details.note?.status}
+                    criteria={details.rubric || []}
+                    onReviewed={refreshAfterReview}
+                  />
+                </div>
+              </>
+            )}
+            <div style={{ marginTop: "16px", textAlign: "right" }}>
+              <button type="button" style={styles.button} onClick={closeSubmission}>
+                Close
+              </button>
             </div>
-
-            <button
-              type="button"
-              style={styles.button}
-              onClick={() => {
-                setSelectedAssignmentId(null);
-                setDetails(null);
-                setDetailsError("");
-              }}
-            >
-              Close
-            </button>
           </div>
-
-          {detailsLoading && (
-            <p className="directory-loading">
-              Loading documentation…
-            </p>
-          )}
-
-          {detailsError && (
-            <p className="directory-error">
-              {detailsError}
-            </p>
-          )}
-
-          {!detailsLoading && details && (
-            <>
-              {/* Student */}
-              <div className="scope-rule">
-                <strong>Student</strong>
-
-                <span>
-                  {formatStudent(
-                    details.student
-                  )}
-                </span>
-              </div>
-
-              {/* Patient */}
-              <div className="scope-rule">
-                <strong>Patient</strong>
-
-                <span>
-                  {details.patientCase
-                    ?.patient_name ||
-                    "Unknown patient"}
-                </span>
-              </div>
-
-              {/* Case */}
-              <div className="scope-rule">
-                <strong>Case</strong>
-
-                <span>
-                  {details.patientCase?.title ||
-                    "Untitled case"}
-                </span>
-              </div>
-
-              {/* Note status */}
-              <div className="scope-rule">
-                <strong>Status</strong>
-
-                <span>
-                  {details.note?.status ||
-                    "Unknown"}
-                </span>
-              </div>
-
-              {/* Dynamic note template */}
-              <NoteDetails note={details.note} />
-
-              {/* Instructor review actions */}
-              <div style={{ marginTop: "28px" }}>
-                <ReviewDecisionPanel
-                  assignmentId={
-                    details.assignmentId
-                  }
-                  status={
-                    details.note?.status
-                  }
-                  onReviewed={
-                    refreshAfterReview
-                  }
-                />
-              </div>
-            </>
-          )}
-        </section>
-      )}
+        )}
+      </dialog>
     </div>
   );
 }

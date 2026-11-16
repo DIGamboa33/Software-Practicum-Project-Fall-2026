@@ -2,13 +2,8 @@ export const instructorNavigation = [
   { id: "overview", label: "Overview", icon: "grid" },
   { id: "cohorts", label: "Classes", icon: "patients" },
   { id: "cases", label: "Scenario library", icon: "calendar" },
-  { id: "expectations", label: "Expectations", icon: "settings" },
-  { id: "monitoring", label: "Monitor activity", icon: "chart" },
-  { id: "review", label: "Review & co-sign", icon: "patients" },
-  { id: "feedback", label: "Feedback & grades", icon: "grid" },
-  { id: "oversight", label: "Cohort oversight", icon: "chart" },
+  { id: "review", label: "Review & grading", icon: "chart" },
   { id: "patients", label: "Patients", icon: "patients" },
-  { id: "closeout", label: "Closeout", icon: "calendar" },
 ];
 
 export const adminNavigation = [

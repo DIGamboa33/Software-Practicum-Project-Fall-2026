@@ -2,6 +2,9 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import PharmacyNotesPage from "./PharmacyNotesPage";
+import VitalEntryForm from "../components/VitalEntryForm";
+import VitalsDetailModal from "../components/VitalsDetailModal";
+import { fetchStudentVitals, createStudentVital, deleteStudentVital } from "../lib/api";
 import {
   fetchStudentCases,
   fetchStudentPharmacyNotes,
@@ -17,6 +20,7 @@ const TABS = [
   "Notes",
   "Appointments",
   "Referrals",
+  "Vitals",
 ];
 
 const STATUSES = [
@@ -33,6 +37,7 @@ const ACTIONS = {
   Roomed: "Start Encounter",
   "In progress": "Check Out",
 };
+
 
 const MINT = "#78e3d1";
 
@@ -131,7 +136,7 @@ function Row({ label, value }) {
   );
 }
 
-function DataTable({ columns, rows }) {
+function DataTable({ columns, rows, onRowClick }) {
   if (!rows.length) {
     return <p className="case-help-text">No records available.</p>;
   }
@@ -150,7 +155,13 @@ function DataTable({ columns, rows }) {
         </thead>
         <tbody>
           {rows.map((item, index) => (
-            <tr key={item.id ?? index}>
+            <tr 
+              key={item.id ?? index} 
+              {...(onRowClick ? {
+                onClick: () => onRowClick(item),
+                style: { cursor: "pointer" }
+              } : {})}
+            >
               {columns.map(([label, render]) => (
                 <td key={label}>{render(item)}</td>
               ))}
@@ -182,6 +193,8 @@ export default function StudentCaseDetailPage({
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState("");
   const [noteCount, setNoteCount] = useState(0);
+  const [vitalsList, setVitalsList] = useState([]);
+  const [selectedVitalModal, setSelectedVitalModal] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -267,6 +280,22 @@ export default function StudentCaseDetailPage({
     };
   }, [patient?.assignment_id, tab]);
 
+  useEffect(() => {
+    let active = true;
+    async function loadVitals() {
+      
+      if (!patient?.assignment_id) return;
+      try {
+        const data = await fetchStudentVitals(patient.assignment_id);
+        if (active) setVitalsList(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Failed to load vitals history:", err);
+      }
+    }
+    loadVitals();
+    return () => { active = false; };
+  }, [patient?.assignment_id]);
+
   async function advanceStatus() {
     const current =
       patient?.encounter_status ??
@@ -351,11 +380,27 @@ export default function StudentCaseDetailPage({
 
   const vitals = Array.isArray(patient.vitals)
     ? sortRecent(patient.vitals, [
-        "recorded_at",
-        "measured_at",
-        "date",
-      ])[0]
+      "recorded_at",
+      "measured_at",
+      "date",
+    ])[0]
     : patient.vitals ?? patient.current_vitals;
+  
+  const handleSaveVital = async (formData) => {
+    try {
+      // Strip out the transient local 'warnings' object before posting to DB
+      const { warnings, ...payload } = formData;
+      const savedRecord = await createStudentVital(patient.assignment_id, payload);
+      setVitalsList((prev) => [savedRecord, ...prev]);
+      alert("Vitals recorded successfully!");
+    } catch (err) {
+      setError("Failed to save vitals entry.");
+    }
+  };
+  const handleDeleteVital = async (vitalId) => {
+    await deleteStudentVital(vitalId);
+    setVitalsList((prev) => prev.filter((item) => item.id !== vitalId));
+  };
 
   const allergies = patient.allergies;
   const medicalHistory =
@@ -389,8 +434,8 @@ export default function StudentCaseDetailPage({
       .filter((item) => {
         const date = new Date(
           item.scheduled_at ??
-            item.appointment_date ??
-            item.date
+          item.appointment_date ??
+          item.date
         ).getTime();
 
         return (
@@ -414,10 +459,10 @@ export default function StudentCaseDetailPage({
     [
       "Blood Pressure",
       vitals?.blood_pressure ??
-        (vitals?.systolic != null &&
+      (vitals?.systolic != null &&
         vitals?.diastolic != null
-          ? `${vitals.systolic}/${vitals.diastolic} mmHg`
-          : null),
+        ? `${vitals.systolic}/${vitals.diastolic} mmHg`
+        : null),
     ],
     ["Heart Rate", vitals?.heart_rate ?? vitals?.pulse],
     ["Temperature", vitals?.temperature],
@@ -581,9 +626,8 @@ export default function StudentCaseDetailPage({
                   width: "100%",
                   padding: "11px 8px",
                   textAlign: collapsed ? "center" : "left",
-                  border: `1px solid ${
-                    tab === item ? MINT : "#e5e9f0"
-                  }`,
+                  border: `1px solid ${tab === item ? MINT : "#e5e9f0"
+                    }`,
                   borderRadius: 9,
                   background:
                     tab === item ? MINT : "#f7f9fc",
@@ -807,8 +851,8 @@ export default function StudentCaseDetailPage({
                         Last recorded:{" "}
                         {formatDate(
                           vitals.recorded_at ??
-                            vitals.measured_at ??
-                            vitals.date
+                          vitals.measured_at ??
+                          vitals.date
                         )}
                       </p>
                     </>
@@ -881,8 +925,8 @@ export default function StudentCaseDetailPage({
                           label="Date"
                           value={formatDate(
                             nextAppointment.scheduled_at ??
-                              nextAppointment.appointment_date ??
-                              nextAppointment.date
+                            nextAppointment.appointment_date ??
+                            nextAppointment.date
                           )}
                         />
                         <Row
@@ -987,8 +1031,8 @@ export default function StudentCaseDetailPage({
                     (item) =>
                       formatDate(
                         item.collected_at ??
-                          item.recorded_at ??
-                          item.date
+                        item.recorded_at ??
+                        item.date
                       ),
                   ],
                 ]}
@@ -1002,6 +1046,42 @@ export default function StudentCaseDetailPage({
                 </dl>
               )}
             </Card>
+          )}
+{tab === "Vitals" && (
+            <div>
+              <VitalEntryForm 
+                patientAge={patient.patient_age}
+                onSubmitVital={handleSaveVital} 
+              />
+              <Card title="Historical Vitals">
+                <p className="case-help-text" style={{ marginBottom: 12 }}>Click any row to inspect full measurements and clinical warnings.</p>
+                <div style={{ cursor: "pointer" }}>
+                  <DataTable
+                    rows={vitalsList}
+                    onRowClick={(item) => setSelectedVitalModal(item)}
+                    columns={[
+                      ["Date", (item) => formatDate(item.recorded_at ?? item.created_at)],
+                      ["BP", (item) => item.systolic && item.diastolic ? `${item.systolic}/${item.diastolic} mmHg` : "Not recorded"],
+                      ["HR", (item) => item.heart_rate ? `${item.heart_rate} bpm` : "Not recorded"],
+                      ["Temp", (item) => item.temperature ? `${item.temperature} °F` : "Not recorded"],
+                      ["SpO2", (item) => item.spo2 ? `${item.spo2}%` : "Not recorded"],
+                      ["Resp Rate", (item) => item.respiratory_rate ? `${item.respiratory_rate}/min` : "Not recorded"],
+                      ["Weight", (item) => item.weight_lbs ? `${item.weight_lbs} lbs` : "Not recorded"],
+                      ["Glucose", (item) => item.blood_glucose_mg_dl ? `${item.blood_glucose_mg_dl} mg/dL` : "Not recorded"],
+                    ]}
+                  />
+                </div>
+              </Card>
+
+              {selectedVitalModal && (
+                <VitalsDetailModal 
+                  vital={selectedVitalModal} 
+                  patientAge={patient.patient_age} 
+                  onClose={() => setSelectedVitalModal(null)}
+                  onDelete={handleDeleteVital}
+                />
+              )}
+            </div>
           )}
 
           {tab === "Notes" && (
@@ -1031,8 +1111,8 @@ export default function StudentCaseDetailPage({
                     (item) =>
                       formatDate(
                         item.scheduled_at ??
-                          item.appointment_date ??
-                          item.date
+                        item.appointment_date ??
+                        item.date
                       ),
                   ],
                   [
