@@ -119,12 +119,17 @@ const routesByRole = {
   Student: {
     navigation: studentNavigation,
     pages: {
-      overview: { path: "/student", Component: StudentOverviewPage },
+      overview: {
+        path: "/student",
+        Component: StudentOverviewPage,
+        mode: "assessment",
+      },
       classes: { path: "/student/classes", Component: StudentClassesPage },
       classDetail: { path: "/student/class", Component: StudentClassDetailPage },
       caseDetail: {
         path: "/student/case",
         Component: StudentCaseDetailsPage,
+        mode: "assessment",
       },
       pharmacyNotes: {
         path: "/student/pharmacy-notes",
@@ -133,6 +138,17 @@ const routesByRole = {
       orderEntry: {
         path: "/student/orders",
         Component: StudentOrderEntryPage,
+      },
+      trainingCases: {
+        path: "/student/training-cases",
+        Component: StudentOverviewPage,
+        mode: "training",
+      },
+
+      trainingCaseDetail: {
+        path: "/student/training-case",
+        Component: StudentCaseDetailsPage,
+        mode: "training",
       },
       settings: { path: "/student/settings", Component: SettingsPage },
       frontDesk :{ path: "/student/frontdesk", Component: FrontDeskDashboardPage},
@@ -182,7 +198,11 @@ function DashboardRoute({ onLogout, user }) {
 
   const ActivePage = page.Component;
   const content = ActivePage ? (
-    <ActivePage user={user} onNavigate={navigateTo} />
+    <ActivePage
+      user={user}
+      onNavigate={navigateTo}
+      mode={page.mode || "assessment"}
+    />
   ) : (
     <DatabasePlaceholderPage {...page} />
   );

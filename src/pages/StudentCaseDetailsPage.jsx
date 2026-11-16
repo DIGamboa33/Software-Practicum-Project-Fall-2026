@@ -11,6 +11,7 @@ import {
   updateStudentCaseStatus,
 } from "../lib/api";
 import StudentMedicationsPage from "./StudentMedicationsPage";
+import { trainingCases } from "../lib/trainingcases";
 
 const TABS = [
   "Overview",
@@ -176,6 +177,7 @@ export default function StudentCaseDetailPage({
   selectedCaseId,
   onNavigate,
   user,
+  mode = "assessment",
 }) {
   const [params] = useSearchParams();
 
@@ -208,7 +210,10 @@ export default function StudentCaseDetailPage({
           throw new Error("No case selected.");
         }
 
-        const result = await fetchStudentCases();
+        const result =
+          mode === "training"
+            ? trainingCases
+            : await fetchStudentCases();
         const cases = Array.isArray(result)
           ? result
           : result?.cases ?? [];

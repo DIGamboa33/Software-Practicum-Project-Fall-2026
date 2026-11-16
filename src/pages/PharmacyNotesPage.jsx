@@ -14,6 +14,19 @@ const INSTRUCTORS = [
   { id: "demo-john-doe", name: "John Doe" },
 ];
 
+const ICD10_CODES = [
+  { code: "I10", description: "Essential (primary) hypertension" },
+  { code: "E11.9", description: "Type 2 diabetes mellitus without complications" },
+  { code: "E78.5", description: "Hyperlipidemia, unspecified" },
+  { code: "J45.909", description: "Unspecified asthma, uncomplicated" },
+  { code: "K21.9", description: "Gastro-esophageal reflux disease without esophagitis" },
+  { code: "R42", description: "Dizziness and giddiness" },
+  { code: "R51.9", description: "Headache, unspecified" },
+  { code: "M54.50", description: "Low back pain, unspecified" },
+  { code: "F41.9", description: "Anxiety disorder, unspecified" },
+  { code: "Z79.899", description: "Other long term (current) drug therapy" },
+];
+
 const TEMPLATES = {
   pharmacy_soap: {
     label: "SOAP (Subjective, Objective, Assessment, Plan)",
@@ -173,6 +186,7 @@ const VITALS = [
 
 const PROBLEM = [
   ["name", "Diagnosis / Clinical Problem"],
+  ["icd10Code", "ICD-10-CM Code"],
   ["status", "Problem Status / Priority"],
   ["evidence", "Supporting Clinical Evidence"],
   ["reasoning", "Clinical Rationale"],
@@ -695,6 +709,17 @@ export default function PharmacyNotesPage({
         label={label}
         value={values[key]}
         disabled={disabled}
+        options={
+          key === "icd10Code"
+            ? [
+                { value: "", label: "Select ICD-10 code" },
+                ...ICD10_CODES.map((item) => ({
+                  value: item.code,
+                  label: `${item.code} - ${item.description}`,
+                })),
+              ]
+            : undefined
+        }
         change={(value) => change(key, value)}
       />
     ));
