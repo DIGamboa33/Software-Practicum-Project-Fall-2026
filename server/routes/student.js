@@ -1645,5 +1645,149 @@ studentRouter.delete("/vitals/:vitalId", async (request, response) => {
 
   return response.json({ message: "Vitals record deleted successfully.", deletedId: vitalId });
 });
+// GET lab orders for a specific assignment
+studentRouter.get("/assignments/:assignmentId/lab-orders", async (request, response) => {
+  const authorization = request.headers.authorization;
+  if (!authorization?.startsWith("Bearer ")) {
+    return response.status(401).json({ message: "Authentication required." });
+  }
+
+  const accessToken = authorization.slice(7);
+  const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
+  if (authError || !user) {
+    return response.status(401).json({ message: "Invalid or expired session." });
+  }
+
+  try {
+    const { assignmentId } = request.params;
+    const supabaseAdmin = getSupabaseAdmin();
+
+    const { data, error } = await supabaseAdmin
+      .schema("learning")
+      .from("lab_orders")
+      .select("*")
+      .eq("assignment_id", assignmentId)
+      .order("ordered_at", { ascending: false });
+
+    if (error) throw error;
+    return response.json(data || []);
+  } catch (err) {
+    console.error("Error fetching lab orders endpoint:", err);
+    return response.status(500).json({ message: err.message });
+  }
+});
+
+// POST new lab order entry for an assignment
+studentRouter.post("/assignments/:assignmentId/lab-orders", async (request, response) => {
+  const authorization = request.headers.authorization;
+  if (!authorization?.startsWith("Bearer ")) {
+    return response.status(401).json({ message: "Authentication required." });
+  }
+
+  const accessToken = authorization.slice(7);
+  const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
+  if (authError || !user) {
+    return response.status(401).json({ message: "Invalid or expired session." });
+  }
+
+  try {
+    const { assignmentId } = request.params;
+    const {
+      test_code,
+      test_name,
+      category,
+      clinical_indication,
+      fasting_required,
+      specimen_type,
+      priority,
+      special_instructions,
+    } = request.body;
+
+    if (!test_name) {
+      return response.status(400).json({ message: "Test name is required." });
+    }
+
+    const supabaseAdmin = getSupabaseAdmin();
+
+    const { data, error } = await supabaseAdmin
+      .schema("learning")
+      .from("lab_orders")
+      .insert([
+        {
+          assignment_id: assignmentId,
+          test_code: test_code || null,
+          test_name: test_name.trim(),
+          category: category || "Chemistry",
+          clinical_indication: clinical_indication || null,
+          fasting_required: Boolean(fasting_required),
+          specimen_type: specimen_type || null,
+          priority: priority || "Routine",
+          status: "Draft",
+          special_instructions: special_instructions || null,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return response.status(201).json(data);
+  } catch (err) {
+    console.error("Error creating lab order endpoint:", err);
+    return response.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE a lab order entry 
+studentRouter.delete("/lab-orders/:orderId", async (request, response) => {
+  const authorization = request.headers.authorization;
+  if (!authorization?.startsWith("Bearer ")) {
+    return response.status(401).json({ message: "Authentication required." });
+  }
+
+  const accessToken = authorization.slice(7);
+  const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
+  if (authError || !user) {
+    return response.status(401).json({ message: "Invalid or expired session." });
+  }
+
+  const { orderId } = request.params;
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { data: order, error: orderError } = await supabaseAdmin
+    .schema("learning")
+    .from("lab_orders")
+    .select("id, assignment_id")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (orderError || !order) {
+    return response.status(404).json({ message: "Lab order not found." });
+  }
+
+  const { data: assignment, error: assignmentError } = await supabaseAdmin
+    .schema("learning")
+    .from("student_case_assignments")
+    .select("id")
+    .eq("id", order.assignment_id)
+    .eq("student_id", user.id)
+    .maybeSingle();
+
+  if (assignmentError || !assignment) {
+    return response.status(403).json({ message: "You do not have permission to delete this lab order." });
+  }
+
+  const { error: deleteError } = await supabaseAdmin
+    .schema("learning")
+    .from("lab_orders")
+    .delete()
+    .eq("id", orderId);
+
+  if (deleteError) {
+    console.error("Unable to delete lab order:", deleteError.message);
+    return response.status(500).json({ message: "Unable to delete lab order." });
+  }
+
+  return response.json({ message: "Lab order deleted successfully.", deletedId: orderId });
+});
 
 export default studentRouter;

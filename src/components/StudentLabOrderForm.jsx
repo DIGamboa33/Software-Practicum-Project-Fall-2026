@@ -1,13 +1,22 @@
 import { useEffect, useState } from "react";
-import { fetchStudentOrders, saveStudentOrders } from "../lib/api";
+import { fetchStudentLabOrders, createStudentLabOrder, deleteStudentLabOrder } from "../lib/api";
 
-export default function StudentLabOrderForm({ assignmentId, onSaved }) {
-  const [orderType, setOrderType] = useState("Lab");
-  const [orderName, setOrderName] = useState("");
+export default function StudentLabOrderForm({ assignmentId }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  const [formData, setFormData] = useState({
+    test_name: "",
+    test_code: "",
+    category: "Chemistry",
+    clinical_indication: "",
+    fasting_required: false,
+    specimen_type: "Venous Blood",
+    priority: "Routine",
+    special_instructions: "",
+  });
 
   useEffect(() => {
     let active = true;
@@ -15,19 +24,12 @@ export default function StudentLabOrderForm({ assignmentId, onSaved }) {
       if (!assignmentId) return;
       try {
         setLoading(true);
-        const data = await fetchStudentOrders(assignmentId);
+        const data = await fetchStudentLabOrders(assignmentId);
         if (active && Array.isArray(data)) {
-          setOrders(
-            data.map((order) => ({
-              id: order.id,
-              type: order.order_type,
-              name: order.order_name,
-              status: order.status,
-            }))
-          );
+          setOrders(data);
         }
       } catch (err) {
-        if (active) setError("Failed to load existing orders.");
+        if (active) setError(err.message || "Failed to load lab orders.");
       } finally {
         if (active) setLoading(false);
       }
@@ -36,110 +38,210 @@ export default function StudentLabOrderForm({ assignmentId, onSaved }) {
     return () => { active = false; };
   }, [assignmentId]);
 
-  const handleAddOrder = () => {
-    if (!orderName.trim()) return;
-
-    const newOrder = {
-      id: `new-${Date.now()}`,
-      type: orderType,
-      name: orderName.trim(),
-      status: "Draft",
-    };
-
-    setOrders((prev) => [...prev, newOrder]);
-    setOrderName("");
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
   };
 
-  const handleRemoveOrder = (orderId) => {
-    setOrders((prev) => prev.filter((order) => order.id !== orderId));
-  };
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.test_name.trim()) {
+      setError("Test name is required.");
+      return;
+    }
 
-  const handleSave = async () => {
     try {
-      setSaving(true);
+      setSubmitting(true);
       setError("");
-      await saveStudentOrders(assignmentId, orders);
-      alert("Orders saved successfully!");
-      onSaved?.();
+      const newOrder = await createStudentLabOrder(assignmentId, formData);
+      setOrders((prev) => [newOrder, ...prev]);
+      setFormData({
+        test_name: "",
+        test_code: "",
+        category: "Chemistry",
+        clinical_indication: "",
+        fasting_required: false,
+        specimen_type: "Venous Blood",
+        priority: "Routine",
+        special_instructions: "",
+      });
     } catch (err) {
-      setError(err.message || "Failed to save orders.");
+      setError(err.message || "Failed to create lab order.");
     } finally {
-      setSaving(false);
+      setSubmitting(false);
     }
   };
 
-  if (loading) return <p className="case-help-text">Loading orders...</p>;
+  const handleDelete = async (orderId) => {
+    if (!window.confirm("Are you sure you want to delete this lab order?")) return;
+    try {
+      await deleteStudentLabOrder(orderId);
+      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+    } catch (err) {
+      alert(err.message || "Failed to delete lab order.");
+    }
+  };
+
+  if (loading) return <p className="case-help-text">Loading lab orders...</p>;
 
   return (
     <div className="panel data-panel" style={{ padding: 16, marginBottom: 16 }}>
       <div className="case-section-heading" style={{ marginBottom: 12 }}>
-        <h2 style={{ margin: 0, fontSize: 18 }}>Create Lab / Diagnostic Order</h2>
+        <h2 style={{ margin: 0, fontSize: 18 }}>Order New Laboratory Test</h2>
       </div>
 
-      {error && <p role="alert" style={{ color: "#d9534f", fontSize: 13 }}>{error}</p>}
+      {error && <p role="alert" style={{ color: "#d9534f", fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 12, marginBottom: 12 }}>
-        <div>
-          <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Order Type</label>
-          <select 
-            value={orderType} 
-            onChange={(e) => setOrderType(e.target.value)}
-            style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ccc" }}
-          >
-            <option value="Lab">Lab</option>
-            <option value="Imaging">Imaging</option>
-            <option value="Medication">Medication</option>
-            <option value="Referral">Referral</option>
-          </select>
+      <form onSubmit={handleSubmit} style={{ marginBottom: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 12 }}>
+          <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Test Name *</label>
+            <input 
+              type="text" 
+              name="test_name" 
+              value={formData.test_name} 
+              onChange={handleChange} 
+              placeholder="e.g., Comprehensive Metabolic Panel" 
+              style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ccc" }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Test Code / LOINC</label>
+            <input 
+              type="text" 
+              name="test_code" 
+              value={formData.test_code} 
+              onChange={handleChange} 
+              placeholder="e.g., 24323-8" 
+              style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ccc" }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Category</label>
+            <select 
+              name="category" 
+              value={formData.category} 
+              onChange={handleChange} 
+              style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ccc" }}
+            >
+              <option value="Chemistry">Chemistry</option>
+              <option value="Hematology">Hematology</option>
+              <option value="Microbiology">Microbiology</option>
+              <option value="Pathology">Pathology</option>
+              <option value="Radiology">Radiology</option>
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Priority</label>
+            <select 
+              name="priority" 
+              value={formData.priority} 
+              onChange={handleChange} 
+              style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ccc" }}
+            >
+              <option value="Routine">Routine</option>
+              <option value="STAT">STAT</option>
+              <option value="ASAP">ASAP</option>
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Specimen Type</label>
+            <input 
+              type="text" 
+              name="specimen_type" 
+              value={formData.specimen_type} 
+              onChange={handleChange} 
+              placeholder="e.g., Venous Blood" 
+              style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ccc" }}
+            />
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", paddingTop: 20 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
+              <input 
+                type="checkbox" 
+                name="fasting_required" 
+                checked={formData.fasting_required} 
+                onChange={handleChange} 
+              />
+              Fasting Required
+            </label>
+          </div>
         </div>
 
-        <div>
-          <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Description / Test Name</label>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Clinical Indication</label>
           <input 
             type="text" 
-            value={orderName} 
-            onChange={(e) => setOrderName(e.target.value)} 
-            placeholder="e.g., Comprehensive Metabolic Panel (CMP)" 
+            name="clinical_indication" 
+            value={formData.clinical_indication} 
+            onChange={handleChange} 
+            placeholder="e.g., Rule out electrolyte imbalance" 
             style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ccc" }}
           />
         </div>
-      </div>
 
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-        <button type="button" className="secondary-button" onClick={handleAddOrder} style={{ padding: "8px 16px" }}>
-          Add to Drafts
-        </button>
-      </div>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Special Instructions</label>
+          <textarea 
+            name="special_instructions" 
+            value={formData.special_instructions} 
+            onChange={handleChange} 
+            placeholder="Enter any special handling or patient instructions..." 
+            rows="2" 
+            style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #ccc" }}
+          />
+        </div>
 
-      <div style={{ marginTop: 16 }}>
-        <h3 style={{ fontSize: 14, marginBottom: 8 }}>Draft Orders</h3>
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button type="submit" className="primary-button" disabled={submitting} style={{ padding: "8px 16px" }}>
+            {submitting ? "Placing Order..." : "Submit Lab Order"}
+          </button>
+        </div>
+      </form>
+
+      <div>
+        <h3 style={{ fontSize: 16, marginBottom: 8 }}>Active Lab Orders</h3>
         {orders.length === 0 ? (
-          <p className="case-help-text">No orders added yet.</p>
+          <p className="case-help-text">No lab orders recorded yet.</p>
         ) : (
-          <div className="table-wrap" style={{ marginBottom: 16 }}>
+          <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Type</th>
-                  <th>Order</th>
+                  <th>Test Name</th>
+                  <th>Category</th>
+                  <th>Priority</th>
+                  <th>Specimen</th>
+                  <th>Fasting</th>
                   <th>Status</th>
                   <th aria-label="Actions" />
                 </tr>
               </thead>
               <tbody>
-                {orders.map((order) => (
-                  <tr key={order.id}>
-                    <td>{order.type}</td>
-                    <td>{order.name}</td>
-                    <td><span className="status-badge">{order.status}</span></td>
+                {orders.map((o) => (
+                  <tr key={o.id}>
+                    <td><strong>{o.test_name}</strong> {o.test_code && <span style={{ fontSize: 11, color: "#666" }}>({o.test_code})</span>}</td>
+                    <td>{o.category}</td>
+                    <td><span className={`priority-badge ${o.priority === "STAT" ? "stat" : ""}`}>{o.priority}</span></td>
+                    <td>{o.specimen_type || "N/A"}</td>
+                    <td>{o.fasting_required ? "Yes" : "No"}</td>
+                    <td><span className="status-badge">{o.status}</span></td>
                     <td>
                       <button 
                         type="button" 
                         className="secondary-button" 
-                        onClick={() => handleRemoveOrder(order.id)}
-                        style={{ padding: "4px 8px", fontSize: 12 }}
+                        onClick={() => handleDelete(o.id)}
+                        style={{ padding: "4px 8px", fontSize: 12, color: "#d9534f", borderColor: "#d9534f" }}
                       >
-                        Remove
+                        Delete
                       </button>
                     </td>
                   </tr>
@@ -148,18 +250,6 @@ export default function StudentLabOrderForm({ assignmentId, onSaved }) {
             </table>
           </div>
         )}
-      </div>
-
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <button 
-          type="button" 
-          className="primary-button" 
-          disabled={saving}
-          onClick={handleSave} 
-          style={{ padding: "8px 16px" }}
-        >
-          {saving ? "Saving..." : "Save Orders"}
-        </button>
       </div>
     </div>
   );
