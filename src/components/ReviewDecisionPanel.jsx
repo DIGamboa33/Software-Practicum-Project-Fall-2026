@@ -112,6 +112,15 @@ function ReviewDecisionPanel({ assignmentId, status, criteria = [], onReviewed }
     }
   }
 
+  // Makes an error message larger and pill-shaped. Layered on top of directory-error.
+  const errorPillStyle = {
+    display: "inline-block",
+    padding: "10px 18px",
+    borderRadius: "999px",
+    fontSize: "13px",
+    fontWeight: 400,
+  };
+
   return (
     <section className="panel data-panel review-decision">
       <p className="section-label">Review decision</p>
@@ -174,7 +183,7 @@ function ReviewDecisionPanel({ assignmentId, status, criteria = [], onReviewed }
                 </div>
 
                 {missing && (
-                  <p className="directory-error" role="alert" style={{ margin: "8px 0 0" }}>
+                  <p className="directory-error" role="alert" style={{ ...errorPillStyle, margin: "8px 0 0" }}>
                     Enter points from 0 to {criterion.max_points} (0 counts).
                   </p>
                 )}
@@ -206,7 +215,7 @@ function ReviewDecisionPanel({ assignmentId, status, criteria = [], onReviewed }
       )}
 
       {error && (
-        <p className="directory-error" role="alert">
+        <p className="directory-error" role="alert" style={errorPillStyle}>
           {error}
         </p>
       )}
