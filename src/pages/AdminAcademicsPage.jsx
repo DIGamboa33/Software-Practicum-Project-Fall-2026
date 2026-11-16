@@ -15,6 +15,7 @@ import {
   bulkInviteStudents,
   createAdminClassroom,
   fetchAdminAcademics,
+  removeAdminClassroomInstructor,
   updateAdminClassroomDisciplines,
 } from "../lib/api";
 import "./AdminAcademicsPage.css";
@@ -277,6 +278,28 @@ function AdminAcademicsPage() {
     });
   }
 
+
+  // Remove an instructor from the selected classroom.
+  function handleRemoveInstructor(instructor) {
+    if (!selectedClassroom || isSaving) return;
+
+    // Ask the administrator before removing the instructor.
+    const confirmed = window.confirm(
+      `Are you sure you want to remove ${instructor.name} from ${selectedClassroom.full_name}?`
+    );
+
+    if (!confirmed) return;
+
+    // Call our backend and refresh the classroom information.
+    runAction(() =>
+      removeAdminClassroomInstructor(
+        selectedClassroom.id,
+        instructor.id
+      )
+    );
+  }
+
+
   return (
     <div className="dashboard-page content-page admin-academics-page">
       <section className="page-heading">
@@ -504,7 +527,47 @@ function AdminAcademicsPage() {
 
             <section className="academic-classroom-modal__grid">
               <div>
-                <div className="academic-instructor-list"><strong>Assigned instructors</strong>{selectedClassroom.instructors.length ? selectedClassroom.instructors.map((instructor) => <div key={instructor.id}><span>{instructor.name.split(" ").map((part) => part[0]).join("")}</span><p>{instructor.name}<small>{instructor.accessLevel === "owner" ? "Lead instructor" : "Co-instructor"}</small></p></div>) : <p className="directory-loading">No instructor assigned yet.</p>}</div>
+
+                <div className="academic-instructor-list">
+                  <strong>Assigned instructors</strong>
+
+                  {selectedClassroom.instructors.length ? (
+                    selectedClassroom.instructors.map((instructor) => (
+                      <div key={instructor.id}>
+                        <span>
+                          {instructor.name
+                            .split(" ")
+                            .map((part) => part[0])
+                            .join("")}
+                        </span>
+
+                        <p>
+                          {instructor.name}
+                          <small>
+                            {instructor.accessLevel === "owner"
+                              ? "Lead instructor"
+                              : "Co-instructor"}
+                          </small>
+                        </p>
+
+                        <button
+                          type="button"
+                          className="text-button text-button--danger"
+                          style={{ marginLeft: "auto" }}
+                          disabled={isSaving}
+                          onClick={() => handleRemoveInstructor(instructor)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="directory-loading">
+                      No instructor assigned yet.
+                    </p>
+                  )}
+                </div>
+
                 <form className="admin-form admin-form--compact" onSubmit={submitInstructor}><p className="section-label">Assign instructor</p><select onChange={(event) => setInstructorId(event.target.value)} required value={instructorId}><option value="">Choose {selectedClassroom.discipline} instructor</option>{matchingInstructors.filter((instructor) => !selectedClassroom.instructors.some((assigned) => assigned.id === instructor.id)).map((instructor) => <option key={instructor.id} value={instructor.id}>{instructor.name}</option>)}</select><button className="secondary-button" disabled={isSaving || !matchingInstructors.length} type="submit">Assign instructor</button></form>
               </div>
               <div className="academic-student-panel academic-student-panel--modal"><p className="section-label">Class roster</p><h2>Enrolled students</h2><div className="admin-scroll-list">{paginatedStudents.map((student) => <p key={student.id}><strong>{student.name}</strong><small>{student.subrole || "Discipline not set"}{student.utepId ? ` · ${student.utepId}` : ""}</small></p>)}{!selectedClassroom.students.length && <p className="directory-loading">No students are enrolled in this classroom yet.</p>}</div><Pagination currentPage={studentPage} itemLabel="enrolled students" onPageChange={setStudentPage} onPageSizeChange={(nextPageSize) => { setStudentsPerPage(nextPageSize); setStudentPage(1); }} pageSize={studentsPerPage} totalItems={selectedClassroom.students.length} /></div>

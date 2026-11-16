@@ -4,8 +4,13 @@ import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recha
 import Icon from "../components/Icon";
 import Pagination from "../components/Pagination";
 import { fetchStudentCases } from "../lib/api";
+import { trainingCases } from "../lib/trainingcases";
 
-function StudentOverviewPage({ user, onNavigate }) {
+function StudentOverviewPage({
+  user,
+  onNavigate,
+  mode = "assessment",
+}) {
   const [cases, setCases] = useState([]);
   const [casesLoading, setCasesLoading] = useState(true);
   const [casesError, setCasesError] = useState("");
@@ -32,8 +37,14 @@ function StudentOverviewPage({ user, onNavigate }) {
       try {
         setCasesLoading(true);
         setCasesError("");
+        setCases([]);
+        setCasePage(1);
+        setHoveredCaseId(null);
 
-        const data = await fetchStudentCases();
+        const data =
+          mode === "training"
+            ? trainingCases
+            : await fetchStudentCases();
 
         if (isCurrent) {
           setCases(Array.isArray(data) ? data : []);
@@ -56,12 +67,18 @@ function StudentOverviewPage({ user, onNavigate }) {
     return () => {
       isCurrent = false;
     };
-  }, []);
+  }, [mode]);
 
   function openCase(patientCase) {
-    onNavigate("caseDetail", {
-      caseId: patientCase.id,
-    });
+    onNavigate(
+      mode === "training" ? "trainingCaseDetail" : "caseDetail",
+      {
+        caseId:
+          mode === "training"
+            ? patientCase.id
+            : patientCase.assignment_id,
+      }
+    );
   }
 
   if (casesLoading) {
@@ -84,18 +101,29 @@ function StudentOverviewPage({ user, onNavigate }) {
     <div className="dashboard-page content-page">
       <section className="page-heading">
         <div>
-          <p className="section-label">My cases</p>
+          <p className="section-label">
+            {mode === "training" ? "Training Cases" : "My Cases"}
+          </p>
 
-          <h1>Welcome back, {firstName}</h1>
+          <h1>
+            {mode === "training"
+              ? "Practice Patient Cases"
+              : `Welcome back, ${firstName}`}
+          </h1>
 
           <p>
-            Review your assigned patient scenarios and documentation.
+            {mode === "training"
+              ? "Practice with test patients without grading."
+              : "Review your assigned patient scenarios and documentation."}
           </p>
         </div>
       </section>
 
       <section className="panel data-panel">
-        <div className="student-dashboard-summary">
+        <div
+          className="student-dashboard-summary"
+          style={{ display: mode === "training" ? "none" : undefined }}
+        >
           <article className="student-summary-card"><span className="student-summary-card__icon"><Icon name="patients" size={18} /></span><div><span>Assigned cases</span><strong>{cases.length}</strong><small>Available learning scenarios</small></div></article>
           <article className="student-summary-card"><span className="student-summary-card__icon student-summary-card__icon--mint"><Icon name="chart" size={18} /></span><div><span>In progress</span><strong>{activeCases}</strong><small>Encounters still underway</small></div></article>
           <article className="student-summary-chart">
@@ -104,7 +132,11 @@ function StudentOverviewPage({ user, onNavigate }) {
           </article>
         </div>
 
-        <div className="student-case-table-heading"><div><p className="section-label">Learning workspace</p><h2>Assigned patient cases</h2></div><span>{cases.length} total</span></div>
+        <div className="student-case-table-heading"><div><p className="section-label">Learning workspace</p><h2>
+          {mode === "training"
+            ? "Training patient cases"
+            : "Assigned patient cases"}
+          </h2></div><span>{cases.length} total</span></div>
         {cases.length === 0 ? (
           <p
             style={{
