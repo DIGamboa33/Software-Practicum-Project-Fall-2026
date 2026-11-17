@@ -245,10 +245,6 @@ export default function StudentMedicationsPage({
                       <div>
                         <strong>{getMedicationName(med)}</strong>
 
-                        <p className="case-help-text">
-                          {getMedicationDetails(med) ||
-                            "Dose, route, and frequency not documented"}
-                        </p>
                       </div>
 
                       <span className="case-help-text">
@@ -342,8 +338,7 @@ export default function StudentMedicationsPage({
 
             <p className="case-help-text">
               Search RxNorm to find medications that the patient
-              reports taking but are missing from the existing
-              medication list.
+              reports taking.
             </p>
 
             <form
@@ -654,6 +649,18 @@ export default function StudentMedicationsPage({
                 );
               })
             )}
+
+
+        {/* VIEW SELECTED MEDICATIONS */}
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => setActiveSection("interactions")}
+              disabled={selectedDrugs.length === 0}
+              style={{ marginTop: 16 }}
+            >
+              View Selected Medications ({selectedDrugs.length}) →
+            </button>
           </div>
         )}
 
@@ -703,6 +710,30 @@ export default function StudentMedicationsPage({
                 Open Lexidrug ↗
               </a>
             </div>
+
+            
+            {/* PATIENT ALLERGIES */}
+            <div style={{ marginTop: 24 }}>
+              <h3>Patient Allergies</h3>
+
+              {Array.isArray(patient?.allergies) && patient.allergies.length > 0 ? (
+                <ul>
+                  {patient.allergies.map((allergy, index) => (
+                    <li key={index}>
+                      {typeof allergy === "string"
+                        ? allergy
+                        : allergy.name || allergy.substance || "Unknown allergy"}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="case-help-text">
+                  No allergies documented.
+                </p>
+              )}
+            </div>
+              
+
 
             {/* SELECTED MEDICATIONS */}
             <div style={{ marginTop: 24 }}>
@@ -793,6 +824,45 @@ export default function StudentMedicationsPage({
                     </div>
                   );
                 })
+              )}
+            </div>
+
+            {/* CURRENT CHART MEDICATIONS */}
+            <div style={{ marginTop: 24 }}>
+              <h3>
+                Current Chart Medications ({Array.isArray(medications) ? medications.length : 0})
+              </h3>
+
+              {!Array.isArray(medications) || medications.length === 0 ? (
+                <p className="case-help-text">
+                  No medications recorded in the patient chart.
+                </p>
+              ) : (
+                medications.map((med, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      border: "1px solid #dbe3ed",
+                      borderRadius: 10,
+                      padding: 16,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <strong>{getMedicationName(med)}</strong>
+
+
+                    <p className="case-help-text">
+                      Status:{" "}
+                      {medicationStatuses[index] === "verified"
+                        ? "Verified"
+                        : medicationStatuses[index] === "not-taking"
+                        ? "Not Taking"
+                        : medicationStatuses[index] === "review"
+                        ? "Needs Review"
+                        : "Not Reviewed"}
+                    </p>
+                  </div>
+                ))
               )}
             </div>
           </div>
