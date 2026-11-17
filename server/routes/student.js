@@ -1478,6 +1478,160 @@ studentRouter.get("/classes/:classroomId", async (request, response) => {
     );
   }
 
+  // Surface only the cases assigned to this student in this classroom.  The
+  // assignment is the source of truth here: a case can be reused in another
+  // class without appearing in this student's current class workspace.
+  const { data: assignments, error: assignmentsError } = await supabaseAdmin
+    .schema("learning")
+    .from("student_case_assignments")
+    .select(`
+      id,
+      case_id,
+      encounter_status,
+      note_type,
+      due_at,
+      created_at,
+      updated_at,
+      case:cases (
+        id,
+        title,
+        patient_name,
+        patient_age,
+        patient_sex,
+        chief_complaint
+      )
+    `)
+    .eq("classroom_id", classroomId)
+    .eq("student_id", user.id)
+    .order("due_at", { ascending: true, nullsFirst: false });
+
+  if (assignmentsError) {
+    console.error("Unable to load class assignments:", assignmentsError.message);
+    return response.status(500).json({ message: "Unable to load this class." });
+  }
+
+  const assignmentIds = (assignments || []).map((assignment) => assignment.id);
+  const caseIds = [...new Set((assignments || []).map((assignment) => assignment.case_id))];
+  let latestNoteByAssignment = new Map();
+  let latestReviewByNote = new Map();
+  let scoreByReview = new Map();
+  let possiblePointsByCase = new Map();
+
+  if (assignmentIds.length) {
+    const { data: notes, error: notesError } = await supabaseAdmin
+      .schema("learning")
+      .from("notes")
+      .select("id, assignment_id, status, updated_at")
+      .in("assignment_id", assignmentIds)
+      .order("updated_at", { ascending: false });
+
+    if (notesError) {
+      console.error("Unable to load class notes:", notesError.message);
+      return response.status(500).json({ message: "Unable to load this class." });
+    }
+
+    for (const note of notes || []) {
+      if (!latestNoteByAssignment.has(note.assignment_id)) {
+        latestNoteByAssignment.set(note.assignment_id, note);
+      }
+    }
+
+    const latestNotes = [...latestNoteByAssignment.values()];
+    if (latestNotes.length) {
+      const { data: reviews, error: reviewsError } = await supabaseAdmin
+        .schema("learning")
+        .from("note_reviews")
+        .select("id, note_id, decision, comments, created_at")
+        .in("note_id", latestNotes.map((note) => note.id))
+        .order("created_at", { ascending: false });
+
+      if (reviewsError) {
+        console.error("Unable to load class reviews:", reviewsError.message);
+        return response.status(500).json({ message: "Unable to load this class." });
+      }
+
+      for (const review of reviews || []) {
+        if (!latestReviewByNote.has(review.note_id)) {
+          latestReviewByNote.set(review.note_id, review);
+        }
+      }
+
+      const reviewIds = [...latestReviewByNote.values()].map((review) => review.id);
+      if (reviewIds.length) {
+        const { data: scores, error: scoresError } = await supabaseAdmin
+          .schema("learning")
+          .from("review_scores")
+          .select("review_id, points_awarded")
+          .in("review_id", reviewIds);
+
+        if (scoresError) {
+          console.error("Unable to load class scores:", scoresError.message);
+          return response.status(500).json({ message: "Unable to load this class." });
+        }
+
+        for (const score of scores || []) {
+          scoreByReview.set(
+            score.review_id,
+            (scoreByReview.get(score.review_id) || 0) + Number(score.points_awarded || 0),
+          );
+        }
+      }
+    }
+
+    if (caseIds.length) {
+      const { data: criteria, error: criteriaError } = await supabaseAdmin
+        .schema("learning")
+        .from("rubric_criteria")
+        .select("case_id, max_points")
+        .in("case_id", caseIds);
+
+      if (criteriaError) {
+        console.error("Unable to load class rubric criteria:", criteriaError.message);
+        return response.status(500).json({ message: "Unable to load this class." });
+      }
+
+      for (const criterion of criteria || []) {
+        possiblePointsByCase.set(
+          criterion.case_id,
+          (possiblePointsByCase.get(criterion.case_id) || 0) + Number(criterion.max_points || 0),
+        );
+      }
+    }
+  }
+
+  const cases = (assignments || []).map((assignment) => {
+    const note = latestNoteByAssignment.get(assignment.id);
+    const review = note ? latestReviewByNote.get(note.id) : null;
+    const possiblePoints = possiblePointsByCase.get(assignment.case_id) || 0;
+    const earnedPoints = review ? scoreByReview.get(review.id) || 0 : null;
+
+    return {
+      assignmentId: assignment.id,
+      caseId: assignment.case_id,
+      title: assignment.case?.title || "Untitled case",
+      patientName: assignment.case?.patient_name || "Unknown patient",
+      patientAge: assignment.case?.patient_age || null,
+      patientSex: assignment.case?.patient_sex || null,
+      chiefComplaint: assignment.case?.chief_complaint || null,
+      encounterStatus: assignment.encounter_status || "Not started",
+      noteType: assignment.note_type || "soap",
+      dueAt: assignment.due_at,
+      assignedAt: assignment.created_at,
+      updatedAt: assignment.updated_at,
+      noteStatus: note?.status || "Not started",
+      feedback: review
+        ? {
+            decision: review.decision,
+            comments: review.comments,
+            reviewedAt: review.created_at,
+          }
+        : null,
+      grade: review && possiblePoints > 0
+        ? { earnedPoints, possiblePoints }
+        : null,
+    };
+  });
+
   return response.json({
     id: classroomResult.data.id,
     crn: classroomResult.data.crn,
@@ -1496,6 +1650,7 @@ studentRouter.get("/classes/:classroomId", async (request, response) => {
           teammates: mateIds.map((id) => profileNames.get(id)).filter(Boolean),
         }
       : null,
+    cases,
   });
 }
 
