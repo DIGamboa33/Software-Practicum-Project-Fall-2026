@@ -298,6 +298,17 @@ export function fetchInstructorAssignments(classroomId) {
   return instructorRequest(`/classrooms/${classroomId}/assignments`);
 }
 
+export function fetchInstructorAnnouncements(classroomId) {
+  return instructorRequest(`/classrooms/${classroomId}/announcements`);
+}
+
+export function createInstructorAnnouncement(classroomId, announcement) {
+  return instructorRequest(`/classrooms/${classroomId}/announcements`, {
+    method: "POST",
+    body: JSON.stringify(announcement),
+  });
+}
+
 export async function fetchAdminPatients() {
   //Get the login token from session storage
   const accessToken = sessionStorage.getItem("careflow-access-token");
