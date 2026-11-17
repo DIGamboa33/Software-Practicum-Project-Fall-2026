@@ -49,6 +49,69 @@ function dueLabel(value) {
   return `${Math.abs(difference)} days past due`;
 }
 
+function buildToDoItems(cases) {
+  const now = new Date();
+
+  return cases
+    .map((item) => {
+      const dueDate = item.dueAt ? new Date(item.dueAt) : null;
+      const isFinal = ["Approved", "Completed", "Checked out"].includes(item.noteStatus);
+
+      if (item.noteStatus === "Returned") {
+        return {
+          assignmentId: item.assignmentId,
+          title: `Revise ${item.title}`,
+          detail: item.feedback?.comments || "Your instructor returned this work for revision.",
+          priority: "Needs revision",
+          priorityOrder: 0,
+          dueAt: item.dueAt,
+        };
+      }
+
+      if (!isFinal && dueDate && dueDate < now) {
+        return {
+          assignmentId: item.assignmentId,
+          title: `Complete ${item.title}`,
+          detail: `${dueLabel(item.dueAt)} · ${item.patientName}`,
+          priority: "Past due",
+          priorityOrder: 1,
+          dueAt: item.dueAt,
+        };
+      }
+
+      if (!isFinal && item.noteStatus === "Draft") {
+        return {
+          assignmentId: item.assignmentId,
+          title: `Finish your ${item.noteType.toUpperCase()} note`,
+          detail: `${item.title} · ${item.patientName}`,
+          priority: "In progress",
+          priorityOrder: 2,
+          dueAt: item.dueAt,
+        };
+      }
+
+      if (!isFinal && item.noteStatus === "Not started") {
+        return {
+          assignmentId: item.assignmentId,
+          title: `Begin ${item.title}`,
+          detail: item.dueAt ? dueLabel(item.dueAt) : "No due date assigned",
+          priority: "To do",
+          priorityOrder: 3,
+          dueAt: item.dueAt,
+        };
+      }
+
+      return null;
+    })
+    .filter(Boolean)
+    .sort((first, second) => {
+      if (first.priorityOrder !== second.priorityOrder) {
+        return first.priorityOrder - second.priorityOrder;
+      }
+      return new Date(first.dueAt || "9999-12-31") - new Date(second.dueAt || "9999-12-31");
+    });
+}
+
 function StudentClassDetailPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -111,6 +174,8 @@ function StudentClassDetailPage() {
   const pastDueCases = datedCases
     .filter((item) => new Date(item.dueAt) < now)
     .sort((first, second) => new Date(second.dueAt) - new Date(first.dueAt));
+  const toDoItems = buildToDoItems(cases);
+  const announcements = classroom?.announcements || [];
 
   function selectTimelineCase(item) {
     setCaseFilter("all");
@@ -356,6 +421,55 @@ function StudentClassDetailPage() {
                   </div>
                 </section>
               )}
+            </section>
+
+            <section className="class-classroom-feed">
+              <article className="panel class-to-do">
+                <div className="class-classroom-feed__heading">
+                  <div>
+                    <p className="section-label"><Icon name="chart" size={14} /> Your next steps</p>
+                    <h2>To do</h2>
+                  </div>
+                  <span>{toDoItems.length} open</span>
+                </div>
+                {toDoItems.length ? (
+                  <div className="class-to-do__list">
+                    {toDoItems.slice(0, 5).map((item) => (
+                      <button className="class-to-do__item" key={item.assignmentId} onClick={() => navigate(`/student/case?id=${item.assignmentId}`)} type="button">
+                        <span className={`class-to-do__priority class-to-do__priority--${statusClassName(item.priority)}`} />
+                        <span><strong>{item.title}</strong><small>{item.detail}</small></span>
+                        <span className={`class-to-do__badge class-to-do__badge--${statusClassName(item.priority)}`}>{item.priority}</span>
+                        <Icon name="arrow" size={15} />
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="class-feed-empty"><span className="student-summary-card__icon student-summary-card__icon--mint"><Icon name="chart" size={18} /></span><div><strong>You’re all caught up</strong><p>No case work needs your attention right now.</p></div></div>
+                )}
+              </article>
+
+              <article className="panel class-announcements">
+                <div className="class-classroom-feed__heading">
+                  <div>
+                    <p className="section-label"><Icon name="bell" size={14} /> Class updates</p>
+                    <h2>Announcements</h2>
+                  </div>
+                  <span>{announcements.length}</span>
+                </div>
+                {announcements.length ? (
+                  <div className="class-announcements__list">
+                    {announcements.map((announcement) => (
+                      <article className="class-announcement" key={announcement.id}>
+                        <div><strong>{announcement.title}</strong>{announcement.is_pinned && <span>Pinned</span>}</div>
+                        <p>{announcement.body}</p>
+                        <small>{formatDate(announcement.created_at)}</small>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="class-feed-empty"><span className="student-summary-card__icon"><Icon name="bell" size={18} /></span><div><strong>No announcements yet</strong><p>Updates from your instructor will appear here.</p></div></div>
+                )}
+              </article>
             </section>
         </div>
         )}

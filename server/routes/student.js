@@ -1632,6 +1632,27 @@ studentRouter.get("/classes/:classroomId", async (request, response) => {
     };
   });
 
+  // Announcements are optional until the classroom-announcements migration is
+  // applied. Keeping the class endpoint usable before that rollout avoids
+  // breaking the student dashboard during a staged deployment.
+  const { data: announcements, error: announcementsError } = await supabaseAdmin
+    .schema("school")
+    .from("classroom_announcements")
+    .select("id, title, body, is_pinned, created_at, updated_at")
+    .eq("classroom_id", classroomId)
+    .order("is_pinned", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(6);
+
+  const announcementsTableIsMissing = ["42P01", "PGRST205"].includes(
+    announcementsError?.code,
+  );
+
+  if (announcementsError && !announcementsTableIsMissing) {
+    console.error("Unable to load classroom announcements:", announcementsError.message);
+    return response.status(500).json({ message: "Unable to load this class." });
+  }
+
   return response.json({
     id: classroomResult.data.id,
     crn: classroomResult.data.crn,
@@ -1651,6 +1672,7 @@ studentRouter.get("/classes/:classroomId", async (request, response) => {
         }
       : null,
     cases,
+    announcements: announcementsError ? [] : announcements || [],
   });
 }
 
