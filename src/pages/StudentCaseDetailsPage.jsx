@@ -5,6 +5,8 @@ import PharmacyNotesPage from "./PharmacyNotesPage";
 import VitalEntryForm from "../components/VitalEntryForm";
 import VitalsDetailModal from "../components/VitalsDetailModal";
 import { fetchStudentVitals, createStudentVital, deleteStudentVital } from "../lib/api";
+import { fetchStudentGrading } from "../lib/api";
+import InstructorFeedback from "../components/InstructorFeedback";
 import {
   fetchStudentCases,
   fetchStudentPharmacyNotes,
@@ -330,6 +332,23 @@ export default function StudentCaseDetailPage({
       setUpdating(false);
     }
   }
+
+  const [grading, setGrading] = useState(null);
+
+  useEffect(() => {
+    if (!patient?.assignment_id) return;
+    let active = true;
+
+    fetchStudentGrading(patient.assignment_id)
+      .then((result) => {
+        if (active) setGrading(result);
+      })
+      .catch((err) => console.error("Unable to load grading:", err));
+
+    return () => {
+      active = false;
+    };
+  }, [patient?.assignment_id]);
 
   if (loading) {
     return (
@@ -1080,12 +1099,15 @@ export default function StudentCaseDetailPage({
           )}
 
           {tab === "Notes" && (
+            <>
+            <InstructorFeedback grading={grading} />
             <PharmacyNotesPage
               selectedCaseId={patient.id}
               user={user}
               onNavigate={onNavigate}
               embedded
             />
+            </>
           )}
 
           {tab === "Appointments" && (

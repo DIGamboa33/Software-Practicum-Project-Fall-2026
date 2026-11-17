@@ -1688,7 +1688,10 @@ studentRouter.get("/assignments/:assignmentId/grading", async (request, response
         .select("id, description, max_points, position")
         .eq("case_id", assignment.case_id)
         .order("position"),
-      learning.from("notes").select("id").eq("assignment_id", assignment.id),
+      learning.from("notes")
+              .select("id, status, updated_at")
+              .eq("assignment_id", assignment.id)
+              .order("updated_at", { ascending: false }),
     ]);
 
     if (rubricResult.error) throw rubricResult.error;
@@ -1754,6 +1757,7 @@ studentRouter.get("/assignments/:assignmentId/grading", async (request, response
       rubric,
       dueAt: assignment.due_at,
       attempts,
+      noteStatus: notesResult.data?.[0]?.status || null,
       totalPoints: rubric.reduce((sum, item) => sum + (item.points ?? 0), 0),
       totalMax: rubric.reduce((sum, item) => sum + item.maxPoints, 0),
       scoredCount: rubric.filter((item) => item.points !== null).length,
