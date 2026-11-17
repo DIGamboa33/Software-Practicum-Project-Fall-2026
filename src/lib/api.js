@@ -1084,3 +1084,22 @@ export async function updateStudentLabOrderStatus(orderId, status) {
   if (!response.ok) throw new Error(data.message || "Failed to update order status");
   return data;
 }
+
+// The student's rubric, points and instructor feedback for an assignment.
+export async function fetchStudentGrading(assignmentId) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) {
+    throw new Error("No active session. Please sign in again.");
+  }
+
+  const response = await fetch(
+    `/api/student/assignments/${encodeURIComponent(assignmentId)}/grading`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.message || "Unable to load grading.");
+  }
+  return payload;
+}
