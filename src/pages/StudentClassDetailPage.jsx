@@ -27,6 +27,28 @@ function formatDate(value, options = {}) {
   }).format(new Date(value));
 }
 
+function letterGrade(percentage) {
+  if (percentage >= 90) return "A";
+  if (percentage >= 80) return "B";
+  if (percentage >= 70) return "C";
+  if (percentage >= 60) return "D";
+  return "F";
+}
+
+function dueLabel(value) {
+  const dueDate = new Date(value);
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const startOfDueDate = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+  const difference = Math.round((startOfDueDate - startOfToday) / 86_400_000);
+
+  if (difference === 0) return "Due today";
+  if (difference === 1) return "Due tomorrow";
+  if (difference > 1) return `Due in ${difference} days`;
+  if (difference === -1) return "1 day past due";
+  return `${Math.abs(difference)} days past due`;
+}
+
 function StudentClassDetailPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -81,6 +103,19 @@ function StudentClassDetailPage() {
     ? Math.round(gradedCases.reduce((total, item) => total + (item.grade.earnedPoints / item.grade.possiblePoints) * 100, 0) / gradedCases.length)
     : null;
   const activeCases = cases.filter((item) => !["Approved", "Completed", "Checked out"].includes(item.noteStatus)).length;
+  const datedCases = cases.filter((item) => item.dueAt);
+  const now = new Date();
+  const upcomingCases = datedCases
+    .filter((item) => new Date(item.dueAt) >= now)
+    .sort((first, second) => new Date(first.dueAt) - new Date(second.dueAt));
+  const pastDueCases = datedCases
+    .filter((item) => new Date(item.dueAt) < now)
+    .sort((first, second) => new Date(second.dueAt) - new Date(first.dueAt));
+
+  function selectTimelineCase(item) {
+    setCaseFilter("all");
+    setSelectedAssignmentId(item.assignmentId);
+  }
 
   return (
     <div className="dashboard-page content-page">
@@ -183,7 +218,10 @@ function StudentClassDetailPage() {
                 </article>
                 <article className="class-case-stats__grade">
                   <span>Current average</span>
-                  <strong>{averageGrade === null ? "—" : `${averageGrade}%`}</strong>
+                  <strong>
+                    {averageGrade === null ? "—" : `${averageGrade}%`}
+                    {averageGrade !== null && <em>{letterGrade(averageGrade)}</em>}
+                  </strong>
                   <small>{gradedCases.length ? `${gradedCases.length} graded case${gradedCases.length === 1 ? "" : "s"}` : "Grades appear after review"}</small>
                 </article>
               </div>
@@ -275,6 +313,48 @@ function StudentClassDetailPage() {
                   <span className="student-summary-card__icon"><Icon name="chart" size={20} /></span>
                   <div><strong>No cases are assigned yet</strong><p>Your instructor’s cases will appear here with their due dates, requirements, and feedback.</p></div>
                 </div>
+              )}
+
+              {datedCases.length > 0 && (
+                <section className="class-case-timeline" aria-labelledby="class-case-timeline-title">
+                  <div className="class-case-timeline__heading">
+                    <div>
+                      <p className="section-label"><Icon name="calendar" size={14} /> Assignment schedule</p>
+                      <h3 id="class-case-timeline-title">Due-date timeline</h3>
+                    </div>
+                    <span>{datedCases.length} scheduled</span>
+                  </div>
+                  <div className="class-case-timeline__columns">
+                    <div className="class-due-list">
+                      <div className="class-due-list__heading">
+                        <span className="class-due-dot class-due-dot--upcoming" />
+                        <strong>Upcoming</strong>
+                        <small>{upcomingCases.length}</small>
+                      </div>
+                      {upcomingCases.length ? upcomingCases.map((item) => (
+                        <button className="class-due-item" key={item.assignmentId} onClick={() => selectTimelineCase(item)} type="button">
+                          <time dateTime={item.dueAt}>{formatDate(item.dueAt, { month: "short", day: "numeric" })}</time>
+                          <span><strong>{item.title}</strong><small>{item.patientName} · {dueLabel(item.dueAt)}</small></span>
+                          <Icon name="arrow" size={15} />
+                        </button>
+                      )) : <p className="class-due-list__empty">No future due dates.</p>}
+                    </div>
+                    <div className="class-due-list class-due-list--past">
+                      <div className="class-due-list__heading">
+                        <span className="class-due-dot class-due-dot--past" />
+                        <strong>Past due</strong>
+                        <small>{pastDueCases.length}</small>
+                      </div>
+                      {pastDueCases.length ? pastDueCases.map((item) => (
+                        <button className="class-due-item" key={item.assignmentId} onClick={() => selectTimelineCase(item)} type="button">
+                          <time dateTime={item.dueAt}>{formatDate(item.dueAt, { month: "short", day: "numeric" })}</time>
+                          <span><strong>{item.title}</strong><small>{item.patientName} · {item.noteStatus === "Approved" ? "Completed" : dueLabel(item.dueAt)}</small></span>
+                          <Icon name="arrow" size={15} />
+                        </button>
+                      )) : <p className="class-due-list__empty">No past due dates.</p>}
+                    </div>
+                  </div>
+                </section>
               )}
             </section>
         </div>
