@@ -3616,6 +3616,14 @@ td small {
 }
 
 .class-case-workspace { overflow: hidden; }
+.class-case-workspace, .class-case-timeline, .class-to-do, .class-announcements { padding: 0; }
+.class-workspace-tabs { overflow: hidden; border: 1px solid #e8eaf1; border-radius: 13px; background: #fff; box-shadow: 0 6px 22px rgba(46, 60, 90, .035); }
+.class-workspace-tabs__bar { display: flex; gap: 2px; padding: 8px 10px 0; overflow-x: auto; border-bottom: 1px solid #e9edf4; background: #fbfcff; scrollbar-width: thin; }
+.class-workspace-tab { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 7px; padding: 10px 12px 11px; border: 0; border-bottom: 3px solid transparent; color: #7d899d; background: transparent; font-size: .78rem; font-weight: 780; cursor: pointer; }
+.class-workspace-tab:hover { color: #5369bf; }
+.class-workspace-tab--active { border-bottom-color: #6277d8; color: #485fbb; }
+.class-workspace-tab span { display: grid; min-width: 18px; height: 18px; place-items: center; border-radius: 999px; color: #75829b; background: #edf0f5; font-size: .63rem; }
+.class-workspace-tab--active span { color: #5066bd; background: #e5eaff; }
 .class-case-workspace__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 24px 24px 18px; border-bottom: 1px solid #edf0f5; }
 .class-case-workspace__heading h2 { margin: 4px 0 6px; color: #29344d; font-size: 1.3rem; }
 .class-case-workspace__heading p:not(.section-label) { margin: 0; color: #78849a; }

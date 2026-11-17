@@ -122,6 +122,7 @@ function StudentClassDetailPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [caseFilter, setCaseFilter] = useState("all");
   const [selectedAssignmentId, setSelectedAssignmentId] = useState(null);
+  const [workspaceTab, setWorkspaceTab] = useState("cases");
 
   useEffect(() => {
     if (!classroomId) {
@@ -260,7 +261,29 @@ function StudentClassDetailPage() {
             </article>
             </section>
 
-            <section className="panel class-case-workspace">
+            <section className="class-workspace-tabs" aria-label="Class workspace">
+              <div className="class-workspace-tabs__bar" role="tablist">
+                {[
+                  ["cases", "Cases & grades", cases.length],
+                  ["schedule", "Schedule", datedCases.length],
+                  ["todo", "To do", toDoItems.length],
+                  ["announcements", "Announcements", announcements.length],
+                ].map(([value, label, count]) => (
+                  <button
+                    aria-selected={workspaceTab === value}
+                    className={workspaceTab === value ? "class-workspace-tab class-workspace-tab--active" : "class-workspace-tab"}
+                    key={value}
+                    onClick={() => setWorkspaceTab(value)}
+                    role="tab"
+                    type="button"
+                  >
+                    {label}<span>{count}</span>
+                  </button>
+                ))}
+              </div>
+
+              {workspaceTab === "cases" && (
+              <section className="panel class-case-workspace">
               <div className="class-case-workspace__heading">
                 <div>
                   <p className="section-label"><Icon name="chart" size={14} /> Clinical learning</p>
@@ -380,8 +403,11 @@ function StudentClassDetailPage() {
                 </div>
               )}
 
-              {datedCases.length > 0 && (
-                <section className="class-case-timeline" aria-labelledby="class-case-timeline-title">
+              </section>
+              )}
+
+              {workspaceTab === "schedule" && (
+                <section className="panel class-case-timeline" aria-labelledby="class-case-timeline-title">
                   <div className="class-case-timeline__heading">
                     <div>
                       <p className="section-label"><Icon name="calendar" size={14} /> Assignment schedule</p>
@@ -421,9 +447,8 @@ function StudentClassDetailPage() {
                   </div>
                 </section>
               )}
-            </section>
 
-            <section className="class-classroom-feed">
+              {workspaceTab === "todo" && (
               <article className="panel class-to-do">
                 <div className="class-classroom-feed__heading">
                   <div>
@@ -447,7 +472,9 @@ function StudentClassDetailPage() {
                   <div className="class-feed-empty"><span className="student-summary-card__icon student-summary-card__icon--mint"><Icon name="chart" size={18} /></span><div><strong>You’re all caught up</strong><p>No case work needs your attention right now.</p></div></div>
                 )}
               </article>
+              )}
 
+              {workspaceTab === "announcements" && (
               <article className="panel class-announcements">
                 <div className="class-classroom-feed__heading">
                   <div>
@@ -470,6 +497,7 @@ function StudentClassDetailPage() {
                   <div className="class-feed-empty"><span className="student-summary-card__icon"><Icon name="bell" size={18} /></span><div><strong>No announcements yet</strong><p>Updates from your instructor will appear here.</p></div></div>
                 )}
               </article>
+              )}
             </section>
         </div>
         )}
