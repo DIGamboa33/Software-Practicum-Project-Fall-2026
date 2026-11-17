@@ -310,6 +310,89 @@ instructorRouter.get("/classrooms/:classroomId", async (request, response) => {
   }
 });
 
+instructorRouter.get("/classrooms/:classroomId/announcements", async (request, response) => {
+  try {
+    const context = await requireInstructor(request, response);
+    if (!context) return;
+
+    const access = await verifyClassroomAccess(
+      context.supabaseAdmin,
+      context.profile,
+      request.params.classroomId,
+    );
+    if (!access) return response.status(404).json({ message: "Classroom not found." });
+
+    const { data, error } = await context.supabaseAdmin
+      .schema("school")
+      .from("classroom_announcements")
+      .select("id, title, body, is_pinned, created_at, updated_at")
+      .eq("classroom_id", access.classroom.id)
+      .order("is_pinned", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return response.json({ announcements: data || [] });
+  } catch (error) {
+    console.error("Unable to load classroom announcements:", error);
+    return response.status(500).json({ message: "Unable to load classroom announcements." });
+  }
+});
+
+instructorRouter.post("/classrooms/:classroomId/announcements", async (request, response) => {
+  const title = String(request.body?.title || "").trim();
+  const body = String(request.body?.body || "").trim();
+  const isPinned = Boolean(request.body?.isPinned);
+
+  if (!title || title.length > 140 || !body || body.length > 3000) {
+    return response.status(400).json({
+      message: "Add an announcement title (140 characters or fewer) and message (3,000 characters or fewer).",
+    });
+  }
+
+  try {
+    const context = await requireInstructor(request, response);
+    if (!context) return;
+
+    const access = await verifyClassroomAccess(
+      context.supabaseAdmin,
+      context.profile,
+      request.params.classroomId,
+    );
+    if (!access) return response.status(404).json({ message: "Classroom not found." });
+
+    const { data: announcement, error } = await context.supabaseAdmin
+      .schema("school")
+      .from("classroom_announcements")
+      .insert({
+        classroom_id: access.classroom.id,
+        author_id: context.profile.id,
+        title,
+        body,
+        is_pinned: isPinned,
+      })
+      .select("id, title, body, is_pinned, created_at, updated_at")
+      .single();
+
+    if (error) throw error;
+
+    await writeAuditLog(context.supabaseAdmin, {
+      actor_id: context.profile.id,
+      action: "classroom.announcement_created",
+      entity_type: "classroom_announcement",
+      entity_id: String(announcement.id),
+      details: { classroom_id: access.classroom.id, is_pinned: isPinned },
+    });
+
+    return response.status(201).json({
+      announcement,
+      message: "Announcement posted to the class.",
+    });
+  } catch (error) {
+    console.error("Unable to create classroom announcement:", error);
+    return response.status(500).json({ message: "Unable to post the announcement." });
+  }
+});
+
 
  // Derek: Enroll eligible students in an existing classroom.
 instructorRouter.post(

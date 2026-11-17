@@ -24,5 +24,6 @@ export const patientNavigation = [
 
 export const studentNavigation = [
   { id: "overview", label: "My cases", icon: "grid" },
+  { id: "trainingCases", label: "Training Cases", icon: "patients" },
   { id: "classes", label: "My classes", icon: "chart" }
 ];

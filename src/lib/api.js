@@ -298,6 +298,17 @@ export function fetchInstructorAssignments(classroomId) {
   return instructorRequest(`/classrooms/${classroomId}/assignments`);
 }
 
+export function fetchInstructorAnnouncements(classroomId) {
+  return instructorRequest(`/classrooms/${classroomId}/announcements`);
+}
+
+export function createInstructorAnnouncement(classroomId, announcement) {
+  return instructorRequest(`/classrooms/${classroomId}/announcements`, {
+    method: "POST",
+    body: JSON.stringify(announcement),
+  });
+}
+
 export async function fetchAdminPatients() {
   //Get the login token from session storage
   const accessToken = sessionStorage.getItem("careflow-access-token");
@@ -984,6 +995,94 @@ export async function deleteStudentVital(vitalId) {
     throw new Error(payload.message || "Unable to delete vitals record.");
   }
   return payload;
+}
+
+export async function fetchStudentLabOrders(assignmentId) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) {
+    throw new Error("No active session. Please sign in again.");
+  }
+
+  const response = await fetch(`/api/student/assignments/${assignmentId}/lab-orders`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message || "Failed to fetch lab orders");
+  return payload;
+}
+
+export async function createStudentLabOrder(assignmentId, orderPayload) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) {
+    throw new Error("No active session. Please sign in again.");
+  }
+
+  const response = await fetch(`/api/student/assignments/${assignmentId}/lab-orders`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(orderPayload),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message || "Failed to create lab order");
+  return payload;
+}
+
+export async function deleteStudentLabOrder(orderId) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) {
+    throw new Error("No active session. Please sign in again.");
+  }
+
+  const response = await fetch(`/api/student/lab-orders/${encodeURIComponent(orderId)}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.message || "Unable to delete lab order.");
+  }
+  return payload;
+}
+
+export async function updateStudentLabOrder(orderId, payload) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) throw new Error("No active session.");
+
+  const response = await fetch(`/api/student/lab-orders/${encodeURIComponent(orderId)}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || "Failed to update lab order");
+  return data;
+}
+
+export async function updateStudentLabOrderStatus(orderId, status) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) throw new Error("No active session.");
+
+  const response = await fetch(`/api/student/lab-orders/${encodeURIComponent(orderId)}/status`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ status }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || "Failed to update order status");
+  return data;
 }
 
 // The student's rubric, points and instructor feedback for an assignment.
