@@ -3,8 +3,10 @@ import {
   addInstructorGroupMembers,
   createInstructorClassroomGroup,
   fetchInstructorAssignments,
+  fetchInstructorAnnouncements,
   fetchInstructorClassroom,
   fetchInstructorClassrooms,
+  createInstructorAnnouncement,
   enrollInstructorStudents,
 } from "../lib/api";
 import AssignCaseModal from "../components/AssignCaseModal";
@@ -33,6 +35,13 @@ function InstructorClassesPage({ user }) {
   const [rosterPerPage, setRosterPerPage] = useState(10);
 
   const [assignedCases, setAssignedCases] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(false);
+  const [announcementDraft, setAnnouncementDraft] = useState({
+    title: "",
+    body: "",
+    isPinned: false,
+  });
 
 const NOTE_LABELS = {
   Draft: "Draft",
@@ -88,6 +97,23 @@ async function loadAssignedCases(id) {
   }, [classroomId]);
 
   useEffect(() => {
+    if (!classroomId) return undefined;
+    let isCurrent = true;
+
+    fetchInstructorAnnouncements(classroomId)
+      .then((result) => {
+        if (isCurrent) setAnnouncements(result.announcements || []);
+      })
+      .catch((announcementError) => {
+        if (isCurrent) setError(announcementError instanceof Error ? announcementError.message : "Unable to load classroom announcements.");
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [classroomId]);
+
+  useEffect(() => {
   if (!classroomId) return undefined;
   let isCurrent = true;
   fetchInstructorAssignments(classroomId)
@@ -107,6 +133,8 @@ async function loadAssignedCases(id) {
   useEffect(() => {
     setIsEnrollOpen(false);
     setSelectedEnrollIds([]);
+    setIsAnnouncementOpen(false);
+    setAnnouncementDraft({ title: "", body: "", isPinned: false });
   }, [classroomId]);
 
   // Select or deselect an eligible student.
@@ -213,6 +241,27 @@ async function loadAssignedCases(id) {
       setNotice(result.message);
     } catch (memberError) {
       setError(memberError instanceof Error ? memberError.message : "Unable to add group members.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleCreateAnnouncement(event) {
+    event.preventDefault();
+    if (!classroomId) return;
+
+    setError("");
+    setNotice("");
+    setIsSaving(true);
+
+    try {
+      const result = await createInstructorAnnouncement(classroomId, announcementDraft);
+      setAnnouncements((current) => [result.announcement, ...current]);
+      setAnnouncementDraft({ title: "", body: "", isPinned: false });
+      setIsAnnouncementOpen(false);
+      setNotice(result.message);
+    } catch (announcementError) {
+      setError(announcementError instanceof Error ? announcementError.message : "Unable to post the announcement.");
     } finally {
       setIsSaving(false);
     }
@@ -381,6 +430,72 @@ async function loadAssignedCases(id) {
             ) : (
               <p className="directory-loading">No cases have been assigned in this class yet.</p>
             )}
+          </section>
+
+          <section className="panel class-announcement-manager">
+            <div className="panel__header">
+              <div>
+                <p className="section-label">Class communication</p>
+                <h2>Announcements</h2>
+                <p className="assignment-builder__copy">Post an update that students will see in their class workspace.</p>
+              </div>
+              <div className="panel__header-actions">
+                <span className="preview-label">{announcements.length} posted</span>
+                <button className="secondary-button" onClick={() => setIsAnnouncementOpen((open) => !open)} type="button">
+                  <Icon name={isAnnouncementOpen ? "close" : "plus"} size={15} /> {isAnnouncementOpen ? "Close" : "Post announcement"}
+                </button>
+              </div>
+            </div>
+
+            {isAnnouncementOpen && (
+              <form className="create-class-form announcement-form" onSubmit={handleCreateAnnouncement}>
+                <label>
+                  Title
+                  <input
+                    maxLength="140"
+                    onChange={(event) => setAnnouncementDraft((current) => ({ ...current, title: event.target.value }))}
+                    placeholder="e.g. Case review reminder"
+                    required
+                    value={announcementDraft.title}
+                  />
+                </label>
+                <label>
+                  Message
+                  <textarea
+                    maxLength="3000"
+                    onChange={(event) => setAnnouncementDraft((current) => ({ ...current, body: event.target.value }))}
+                    placeholder="Share the update, deadline, or instructions for your learners."
+                    required
+                    rows="4"
+                    value={announcementDraft.body}
+                  />
+                </label>
+                <label className="announcement-form__pin">
+                  <input
+                    checked={announcementDraft.isPinned}
+                    onChange={(event) => setAnnouncementDraft((current) => ({ ...current, isPinned: event.target.checked }))}
+                    type="checkbox"
+                  />
+                  Pin this announcement at the top of the student feed
+                </label>
+                <div className="form-actions">
+                  <button className="secondary-button" onClick={() => setIsAnnouncementOpen(false)} type="button">Cancel</button>
+                  <button className="primary-button" disabled={isSaving} type="submit">{isSaving ? "Posting..." : "Post announcement"}</button>
+                </div>
+              </form>
+            )}
+
+            {announcements.length ? (
+              <div className="instructor-announcement-list">
+                {announcements.slice(0, 4).map((announcement) => (
+                  <article key={announcement.id}>
+                    <div><strong>{announcement.title}</strong>{announcement.is_pinned && <span>Pinned</span>}</div>
+                    <p>{announcement.body}</p>
+                    <small>Posted {new Date(announcement.created_at).toLocaleDateString()}</small>
+                  </article>
+                ))}
+              </div>
+            ) : !isAnnouncementOpen && <p className="directory-loading">No announcements have been posted for this class yet.</p>}
           </section>
 
           {/* Derek: Instructor student enrollment form. */}

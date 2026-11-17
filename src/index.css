@@ -3723,6 +3723,19 @@ td small {
 .class-announcement span { padding: 3px 6px; border-radius: 5px; color: #a5772d; background: #fff3dc; font-size: .6rem; font-weight: 850; text-transform: uppercase; }
 .class-announcement p { margin: 6px 0; color: #69768c; font-size: .78rem; line-height: 1.45; }
 .class-announcement small { color: #9aa4b5; font-size: .68rem; }
+.class-announcement-manager { margin-top: 20px; }
+.announcement-form { display: grid; gap: 14px; margin: 18px 0; padding: 18px; border: 1px solid #e5eaf4; border-radius: 10px; background: #fbfcff; }
+.announcement-form textarea { min-height: 96px; resize: vertical; }
+.announcement-form__pin { display: flex !important; align-items: center; gap: 8px; color: #65718a; font-size: .8rem; }
+.announcement-form__pin input { width: auto; }
+.instructor-announcement-list { display: grid; gap: 0; margin-top: 16px; border: 1px solid #edf0f5; border-radius: 10px; overflow: hidden; }
+.instructor-announcement-list article { padding: 14px 16px; border-bottom: 1px solid #edf0f5; }
+.instructor-announcement-list article:last-child { border-bottom: 0; }
+.instructor-announcement-list article > div { display: flex; align-items: center; gap: 8px; }
+.instructor-announcement-list strong { color: #3d4963; font-size: .84rem; }
+.instructor-announcement-list span { padding: 3px 6px; border-radius: 5px; color: #a5772d; background: #fff3dc; font-size: .6rem; font-weight: 850; text-transform: uppercase; }
+.instructor-announcement-list p { margin: 6px 0; color: #6d7990; font-size: .8rem; line-height: 1.45; }
+.instructor-announcement-list small { color: #9aa4b5; font-size: .7rem; }
 
 @media (max-width: 900px) {
   .class-detail__facts {
