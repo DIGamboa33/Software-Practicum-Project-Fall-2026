@@ -75,7 +75,7 @@ function StudentClassDetailPage() {
     }
     return cases;
   }, [caseFilter, cases]);
-  const selectedCase = cases.find((item) => item.assignmentId === selectedAssignmentId) || filteredCases[0] || null;
+  const selectedCase = filteredCases.find((item) => item.assignmentId === selectedAssignmentId) || filteredCases[0] || null;
   const gradedCases = cases.filter((item) => item.grade);
   const averageGrade = gradedCases.length
     ? Math.round(gradedCases.reduce((total, item) => total + (item.grade.earnedPoints / item.grade.possiblePoints) * 100, 0) / gradedCases.length)
