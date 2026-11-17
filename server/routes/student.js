@@ -1646,4 +1646,122 @@ studentRouter.delete("/vitals/:vitalId", async (request, response) => {
   return response.json({ message: "Vitals record deleted successfully.", deletedId: vitalId });
 });
 
+// The student's rubric, points and feedback for one assignment.
+studentRouter.get("/assignments/:assignmentId/grading", async (request, response) => {
+  const authorization = request.headers.authorization;
+
+  if (!authorization?.startsWith("Bearer ")) {
+    return response.status(401).json({ message: "Authentication required." });
+  }
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser(authorization.slice(7));
+
+  if (authError || !user) {
+    return response.status(401).json({ message: "Invalid or expired session." });
+  }
+
+  try {
+    const learning = getSupabaseAdmin().schema("learning");
+
+    // The assignment must belong to this student.
+    const { data: assignment, error: assignmentError } = await learning
+      .from("student_case_assignments")
+      .select("id, case_id, due_at")
+      .eq("id", request.params.assignmentId)
+      .eq("student_id", user.id)
+      .maybeSingle();
+
+    if (assignmentError) throw assignmentError;
+
+    if (!assignment) {
+      return response.status(403).json({
+        message: "You do not have access to this case.",
+      });
+    }
+
+    const [rubricResult, notesResult] = await Promise.all([
+      learning
+        .from("rubric_criteria")
+        .select("id, description, max_points, position")
+        .eq("case_id", assignment.case_id)
+        .order("position"),
+      learning.from("notes").select("id").eq("assignment_id", assignment.id),
+    ]);
+
+    if (rubricResult.error) throw rubricResult.error;
+    if (notesResult.error) throw notesResult.error;
+
+    const noteIds = (notesResult.data || []).map((note) => note.id);
+
+    // Latest instructor review across this assignment's notes.
+        // Every instructor review for this assignment's notes, newest first.
+    let review = null;
+    let attempts = 0;
+
+    if (noteIds.length > 0) {
+      const { data, error } = await learning
+        .from("note_reviews")
+        .select("id, decision, comments, created_at")
+        .in("note_id", noteIds)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      review = data?.[0] || null;
+      attempts = data?.length || 0;
+    }
+
+    // Points and per-criterion feedback saved with that review.
+    const scoresByCriterion = new Map();
+
+    if (review) {
+      const { data, error } = await learning
+        .from("review_scores")
+        .select("criterion_id, points_awarded, feedback")
+        .eq("review_id", review.id);
+
+      if (error) throw error;
+
+      for (const row of data || []) {
+        scoresByCriterion.set(row.criterion_id, row);
+      }
+    }
+
+    // The full rubric, with points filled in where the instructor scored.
+    const rubric = (rubricResult.data || []).map((criterion) => {
+      const score = scoresByCriterion.get(criterion.id);
+
+      return {
+        id: criterion.id,
+        description: criterion.description,
+        maxPoints: Number(criterion.max_points),
+        points: score ? Number(score.points_awarded) : null,
+        feedback: score?.feedback || null,
+      };
+    });
+
+    return response.json({
+      review: review
+        ? {
+            decision: review.decision,
+            comments: review.comments,
+            created_at: review.created_at,
+          }
+        : null,
+      rubric,
+      dueAt: assignment.due_at,
+      attempts,
+      totalPoints: rubric.reduce((sum, item) => sum + (item.points ?? 0), 0),
+      totalMax: rubric.reduce((sum, item) => sum + item.maxPoints, 0),
+      scoredCount: rubric.filter((item) => item.points !== null).length,
+    });
+  } catch (error) {
+    console.error("Unable to load grading:", error.message || error);
+
+    return response.status(500).json({ message: "Unable to load grading." });
+  }
+});
 export default studentRouter;
