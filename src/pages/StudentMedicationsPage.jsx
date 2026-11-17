@@ -16,6 +16,10 @@ export default function StudentMedicationsPage({
   const [hasSearched, setHasSearched] = useState(false);
   const [lastSearchedTerm, setLastSearchedTerm] = useState("");
 
+  const [medicationStatuses, setMedicationStatuses] = useState({});
+  const [medicationNotes, setMedicationNotes] = useState({});
+  const [medicationDetails, setMedicationDetails] = useState({});
+
   const sections = [
     ["current", "Medication Reconciliation"],
     ["interactions", "Drug Interactions"],
@@ -25,7 +29,6 @@ export default function StudentMedicationsPage({
     event.preventDefault();
 
     const searchTerm = search.trim();
-
     if (searchTerm.length < 2 || searching) return;
 
     setSearching(true);
@@ -66,6 +69,53 @@ export default function StudentMedicationsPage({
     );
   }
 
+  function getMedicationName(med) {
+    if (typeof med === "string") return med;
+
+    return (
+      med?.name ||
+      med?.medication_name ||
+      med?.drug_name ||
+      "Unnamed medication"
+    );
+  }
+
+  function getMedicationDetails(med) {
+    if (typeof med === "string") return "";
+
+    return [
+      med?.dose || med?.dosage || med?.strength,
+      med?.route,
+      med?.frequency,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
+
+  function updateMedicationStatus(index, status) {
+    setMedicationStatuses((previous) => ({
+      ...previous,
+      [index]: status,
+    }));
+  }
+
+  function updateMedicationNote(index, value) {
+    setMedicationNotes((previous) => ({
+      ...previous,
+      [index]: value,
+    }));
+  }
+
+  function updateDrugDetail(rxcui, field, value) {
+    setMedicationDetails((previous) => ({
+      ...previous,
+      [rxcui]: {
+        ...previous[rxcui],
+        [field]: value,
+      },
+    }));
+  }
+
   return (
     <div className="student-medications-page">
       <section className="panel data-panel">
@@ -95,33 +145,200 @@ export default function StudentMedicationsPage({
           ))}
         </div>
 
-
         {/* MEDICATION RECONCILIATION */}
         {activeSection === "current" && (
           <div>
-            <h3>Current Medications</h3>
+            <h3>Medication Reconciliation</h3>
 
-            {Array.isArray(medications) && medications.length > 0 ? (
-              <ul>
-                {medications.map((med, index) => (
-                  <li key={index}>
-                    {typeof med === "string"
-                      ? med
-                      : JSON.stringify(med)}
-                  </li>
-                ))}
-              </ul>
+            <p className="case-help-text">
+              Review medications documented in the patient's chart
+              and compare them with what the patient reports taking.
+            </p>
+
+            {/* SUMMARY */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(auto-fit, minmax(120px, 1fr))",
+                gap: 12,
+                margin: "20px 0",
+              }}
+            >
+              <div className="panel">
+                <strong>
+                  {Array.isArray(medications)
+                    ? medications.length
+                    : 0}
+                </strong>
+                <p className="case-help-text">Chart medications</p>
+              </div>
+
+              <div className="panel">
+                <strong>
+                  {Array.isArray(medications)
+                    ? medications.filter(
+                        (_, i) =>
+                          medicationStatuses[i] === "verified"
+                      ).length
+                    : 0}
+                </strong>
+                <p className="case-help-text">Verified</p>
+              </div>
+
+              <div className="panel">
+                <strong>
+                  {Array.isArray(medications)
+                    ? medications.filter(
+                        (_, i) =>
+                          medicationStatuses[i] === "not-taking"
+                      ).length
+                    : 0}
+                </strong>
+                <p className="case-help-text">Not taking</p>
+              </div>
+
+              <div className="panel">
+                <strong>
+                  {Array.isArray(medications)
+                    ? medications.filter(
+                        (_, i) =>
+                          medicationStatuses[i] === "review"
+                      ).length
+                    : 0}
+                </strong>
+                <p className="case-help-text">Needs review</p>
+              </div>
+            </div>
+
+            {/* CHART MEDICATIONS */}
+            <h3>Current Chart Medications</h3>
+
+            {!Array.isArray(medications) ||
+            medications.length === 0 ? (
+              <p className="case-help-text">
+                No medications recorded in the patient chart.
+              </p>
             ) : (
-              <p>No medications recorded.</p>
+              medications.map((med, index) => {
+                const status = medicationStatuses[index];
+
+                return (
+                  <div
+                    key={index}
+                    style={{
+                      border: "1px solid #dbe3ed",
+                      borderRadius: 10,
+                      padding: 16,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        gap: 12,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <div>
+                        <strong>{getMedicationName(med)}</strong>
+
+                      </div>
+
+                      <span className="case-help-text">
+                        {status === "verified"
+                          ? "Verified"
+                          : status === "not-taking"
+                          ? "Not taking"
+                          : status === "review"
+                          ? "Needs review"
+                          : "Not reviewed"}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        flexWrap: "wrap",
+                        marginTop: 12,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        className={
+                          status === "verified"
+                            ? "primary-button"
+                            : "secondary-button"
+                        }
+                        onClick={() =>
+                          updateMedicationStatus(index, "verified")
+                        }
+                      >
+                        Verify
+                      </button>
+
+                      <button
+                        type="button"
+                        className={
+                          status === "not-taking"
+                            ? "primary-button"
+                            : "secondary-button"
+                        }
+                        onClick={() =>
+                          updateMedicationStatus(index, "not-taking")
+                        }
+                      >
+                        Not Taking
+                      </button>
+
+                      <button
+                        type="button"
+                        className={
+                          status === "review"
+                            ? "primary-button"
+                            : "secondary-button"
+                        }
+                        onClick={() =>
+                          updateMedicationStatus(index, "review")
+                        }
+                      >
+                        Needs Review
+                      </button>
+                    </div>
+
+                    <textarea
+                      value={medicationNotes[index] || ""}
+                      onChange={(event) =>
+                        updateMedicationNote(
+                          index,
+                          event.target.value
+                        )
+                      }
+                      placeholder="Document patient-reported information or discrepancies..."
+                      rows={2}
+                      style={{
+                        width: "100%",
+                        marginTop: 12,
+                        padding: 10,
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </div>
+                );
+              })
             )}
 
+            {/* RXNORM SEARCH */}
             <hr style={{ margin: "24px 0" }} />
 
-            {/* RXNORM MEDICATION SEARCH */}
             <h3>Add Medication</h3>
+
             <p className="case-help-text">
-              Search RxNorm to find medications that the patient reports
-              taking but are missing from the existing medication list.
+              Search RxNorm to find medications that the patient
+              reports taking.
             </p>
 
             <form
@@ -134,7 +351,9 @@ export default function StudentMedicationsPage({
             >
               <input
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
                 placeholder="Search medication name"
                 aria-label="Medication name"
                 style={{
@@ -147,20 +366,20 @@ export default function StudentMedicationsPage({
               <button
                 type="submit"
                 className="primary-button"
-                disabled={searching || search.trim().length < 2}
+                disabled={
+                  searching || search.trim().length < 2
+                }
               >
                 {searching ? "Searching..." : "Search"}
               </button>
             </form>
 
-            {/* SEARCH ERROR */}
             {searchError && (
               <p role="alert" className="case-help-text">
                 {searchError}
               </p>
             )}
 
-            {/* NO RESULTS */}
             {hasSearched &&
               results.length === 0 &&
               !searching &&
@@ -186,7 +405,6 @@ export default function StudentMedicationsPage({
                 </div>
               )}
 
-            {/* SEARCH RESULTS */}
             {results.length > 0 && (
               <div className="table-wrap">
                 <table>
@@ -211,7 +429,8 @@ export default function StudentMedicationsPage({
                   <tbody>
                     {results.map((drug) => {
                       const isSelected = selectedDrugs.some(
-                        (item) => item.rxcui === drug.rxcui
+                        (item) =>
+                          item.rxcui === drug.rxcui
                       );
 
                       return (
@@ -235,7 +454,9 @@ export default function StudentMedicationsPage({
                                 minWidth: "auto",
                               }}
                             >
-                              {isSelected ? "Selected" : "Select"}
+                              {isSelected
+                                ? "Selected"
+                                : "Select"}
                             </button>
                           </td>
 
@@ -250,7 +471,7 @@ export default function StudentMedicationsPage({
               </div>
             )}
 
-            {/* SELECTED MEDICATIONS */}
+            {/* ADDITIONAL MEDICATIONS */}
             <h3 style={{ marginTop: 24 }}>
               Additional Medications ({selectedDrugs.length})
             </h3>
@@ -260,30 +481,192 @@ export default function StudentMedicationsPage({
                 No additional medications selected.
               </p>
             ) : (
-              selectedDrugs.map((drug) => (
-                <p key={drug.rxcui}>
-                  {drug.name} — RxCUI {drug.rxcui}
+              selectedDrugs.map((drug) => {
+                const details =
+                  medicationDetails[drug.rxcui] || {};
 
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => removeDrug(drug.rxcui)}
-                    style={{ marginLeft: 8 }}
+                return (
+                  <div
+                    key={drug.rxcui}
+                    style={{
+                      border: "1px solid #dbe3ed",
+                      borderRadius: 10,
+                      padding: 16,
+                      marginBottom: 12,
+                    }}
                   >
-                    Remove
-                  </button>
-                </p>
-              ))
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 12,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <div>
+                        <strong>{drug.name}</strong>
+                        <p className="case-help-text">
+                          RxCUI: {drug.rxcui}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() =>
+                          removeDrug(drug.rxcui)
+                        }
+                      >
+                        Remove
+                      </button>
+                    </div>
+
+                    {/* MEDICATION DETAILS */}
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns:
+                          "repeat(auto-fit, minmax(150px, 1fr))",
+                        gap: 12,
+                        marginTop: 12,
+                      }}
+                    >
+                      <div>
+                        <label>Dose / Strength</label>
+                        <input
+                          value={details.dose || ""}
+                          onChange={(event) =>
+                            updateDrugDetail(
+                              drug.rxcui,
+                              "dose",
+                              event.target.value
+                            )
+                          }
+                          placeholder="e.g. 500 mg"
+                          style={{
+                            width: "100%",
+                            padding: 8,
+                            boxSizing: "border-box",
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label>Route</label>
+                        <input
+                          value={details.route || ""}
+                          onChange={(event) =>
+                            updateDrugDetail(
+                              drug.rxcui,
+                              "route",
+                              event.target.value
+                            )
+                          }
+                          placeholder="e.g. Oral"
+                          style={{
+                            width: "100%",
+                            padding: 8,
+                            boxSizing: "border-box",
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label>Frequency</label>
+                        <input
+                          value={details.frequency || ""}
+                          onChange={(event) =>
+                            updateDrugDetail(
+                              drug.rxcui,
+                              "frequency",
+                              event.target.value
+                            )
+                          }
+                          placeholder="e.g. Twice daily"
+                          style={{
+                            width: "100%",
+                            padding: 8,
+                            boxSizing: "border-box",
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label>Source</label>
+                        <select
+                          value={
+                            details.source || "patient"
+                          }
+                          onChange={(event) =>
+                            updateDrugDetail(
+                              drug.rxcui,
+                              "source",
+                              event.target.value
+                            )
+                          }
+                          style={{
+                            width: "100%",
+                            padding: 8,
+                            boxSizing: "border-box",
+                          }}
+                        >
+                          <option value="patient">
+                            Patient
+                          </option>
+                          <option value="caregiver">
+                            Caregiver
+                          </option>
+                          <option value="medication-list">
+                            Medication List
+                          </option>
+                          <option value="other">
+                            Other
+                          </option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <textarea
+                      value={details.notes || ""}
+                      onChange={(event) =>
+                        updateDrugDetail(
+                          drug.rxcui,
+                          "notes",
+                          event.target.value
+                        )
+                      }
+                      placeholder="Additional medication notes..."
+                      rows={2}
+                      style={{
+                        width: "100%",
+                        marginTop: 12,
+                        padding: 10,
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </div>
+                );
+              })
             )}
+
+
+        {/* VIEW SELECTED MEDICATIONS */}
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => setActiveSection("interactions")}
+              disabled={selectedDrugs.length === 0}
+              style={{ marginTop: 16 }}
+            >
+              View Selected Medications ({selectedDrugs.length}) →
+            </button>
           </div>
         )}
 
-
-        
         {/* DRUG INTERACTIONS */}
         {activeSection === "interactions" && (
           <div>
-
             <div
               style={{
                 display: "flex",
@@ -299,7 +682,9 @@ export default function StudentMedicationsPage({
               }}
             >
               <div>
-                <strong>Lexidrug Interaction Checker</strong>
+                <strong>
+                  Lexidrug Interaction Checker
+                </strong>
                 <p
                   style={{
                     margin: "5px 0 0",
@@ -307,8 +692,8 @@ export default function StudentMedicationsPage({
                     color: "#64748b",
                   }}
                 >
-                  Check medication interactions using UTEP's
-                  institutional access.
+                  Check medication interactions using
+                  UTEP's institutional access.
                 </p>
               </div>
 
@@ -325,9 +710,163 @@ export default function StudentMedicationsPage({
                 Open Lexidrug ↗
               </a>
             </div>
+
+            
+            {/* PATIENT ALLERGIES */}
+            <div style={{ marginTop: 24 }}>
+              <h3>Patient Allergies</h3>
+
+              {Array.isArray(patient?.allergies) && patient.allergies.length > 0 ? (
+                <ul>
+                  {patient.allergies.map((allergy, index) => (
+                    <li key={index}>
+                      {typeof allergy === "string"
+                        ? allergy
+                        : allergy.name || allergy.substance || "Unknown allergy"}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="case-help-text">
+                  No allergies documented.
+                </p>
+              )}
+            </div>
+              
+
+
+            {/* SELECTED MEDICATIONS */}
+            <div style={{ marginTop: 24 }}>
+              <h3>
+                Selected Medications ({selectedDrugs.length})
+              </h3>
+
+              <p className="case-help-text">
+                Medications selected during Medication
+                Reconciliation.
+              </p>
+
+              {selectedDrugs.length === 0 ? (
+                <p className="case-help-text">
+                  No medications selected.
+                </p>
+              ) : (
+                selectedDrugs.map((drug) => {
+                  const details =
+                    medicationDetails[drug.rxcui] || {};
+
+                  return (
+                    <div
+                      key={drug.rxcui}
+                      style={{
+                        border: "1px solid #dbe3ed",
+                        borderRadius: 10,
+                        padding: 16,
+                        marginBottom: 12,
+                      }}
+                    >
+                      <strong>{drug.name}</strong>
+
+                      <p className="case-help-text">
+                        RxCUI: {drug.rxcui}
+                      </p>
+
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns:
+                            "repeat(auto-fit, minmax(150px, 1fr))",
+                          gap: 12,
+                          marginTop: 12,
+                        }}
+                      >
+                        <div>
+                          <strong>
+                            Dose / Strength
+                          </strong>
+                          <p>
+                            {details.dose ||
+                              "Not documented"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <strong>Route</strong>
+                          <p>
+                            {details.route ||
+                              "Not documented"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <strong>Frequency</strong>
+                          <p>
+                            {details.frequency ||
+                              "Not documented"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <strong>Source</strong>
+                          <p>
+                            {details.source ||
+                              "patient"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {details.notes && (
+                        <div style={{ marginTop: 12 }}>
+                          <strong>Notes</strong>
+                          <p>{details.notes}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* CURRENT CHART MEDICATIONS */}
+            <div style={{ marginTop: 24 }}>
+              <h3>
+                Current Chart Medications ({Array.isArray(medications) ? medications.length : 0})
+              </h3>
+
+              {!Array.isArray(medications) || medications.length === 0 ? (
+                <p className="case-help-text">
+                  No medications recorded in the patient chart.
+                </p>
+              ) : (
+                medications.map((med, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      border: "1px solid #dbe3ed",
+                      borderRadius: 10,
+                      padding: 16,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <strong>{getMedicationName(med)}</strong>
+
+
+                    <p className="case-help-text">
+                      Status:{" "}
+                      {medicationStatuses[index] === "verified"
+                        ? "Verified"
+                        : medicationStatuses[index] === "not-taking"
+                        ? "Not Taking"
+                        : medicationStatuses[index] === "review"
+                        ? "Needs Review"
+                        : "Not Reviewed"}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         )}
-
       </section>
     </div>
   );
