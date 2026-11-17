@@ -935,12 +935,51 @@ function InstructorReviewPage() {
         }}
         style={{
           width: "min(960px, 94vw)", 
-          overflow: "hidden",
+          overflow: "visible",
           outline: "none",
         }}
       >
+             <button
+              type="button"
+              aria-label="Close"
+              onClick={closeSubmission}
+              style={{
+                position: "absolute",
+                top: "-10px",
+                right: "-10px",
+                zIndex: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "26px",
+                height: "26px",
+                padding: 0,
+                border: "1px solid #e2e8f0",
+                borderRadius: "999px",
+                background: "#ffffff",
+                color: "#64748b",
+                cursor: "pointer",
+              }}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                <path
+                  d="M1 1l8 8M9 1L1 9"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  fill="none"
+                />
+              </svg>
+            </button>
         {selectedAssignmentId !== null && (
-          <div style={{ padding: "28px 32px", maxHeight: "90vh", overflowY: "auto" }}>
+          <div 
+            style={{
+                margin: "14px 0",
+                padding: "14px 32px",
+                maxHeight: "calc(90vh - 28px)",
+                overflowY: "auto",
+                borderRadius: "inherit",
+              }}>
             <header style={{ marginBottom: "16px" }}>
               <p className="section-label">Student documentation</p>
               <h2>Submission Details</h2>
