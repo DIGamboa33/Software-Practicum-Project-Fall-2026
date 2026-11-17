@@ -225,11 +225,11 @@ export default function StudentCaseDetailPage({
           ? result
           : result?.cases ?? [];
 
-        const selected = cases.find(
-          (item) =>
-            String(item.id) === String(caseId) ||
-            String(item.assignment_id) === String(caseId)
-        );
+        const selected =
+          cases.find(
+            (item) => String(item.assignment_id) === String(caseId)
+          ) ??
+          cases.find((item) => String(item.id) === String(caseId));
 
         if (!selected) throw new Error("Case not found.");
 
