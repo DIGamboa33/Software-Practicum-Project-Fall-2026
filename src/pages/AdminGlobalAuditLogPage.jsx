@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -209,6 +209,9 @@ function AdminGlobalAuditLogPage() {
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
 
+  // Reference to our custom export confirmation popup.
+  const exportDialogRef = useRef(null);
+
   // Load the events whenever the page number changes.
   useEffect(() => {
     let isCurrent = true;
@@ -336,6 +339,9 @@ function AdminGlobalAuditLogPage() {
       const timeZone =
         Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+
+      // Export only the information needed for auditing.
+      // Do not include raw details, emails, or affected user IDs.
       const headers = [
         `Date & Time (${timeZone})`,
         "Performed By",
@@ -344,9 +350,7 @@ function AdminGlobalAuditLogPage() {
         "Description",
         "Record Type",
         "Record ID",
-        "User ID",
-        "Affected User ID",
-        "Details",
+        "Actor ID",
         "Audit Event ID"
       ];
 
@@ -359,14 +363,9 @@ function AdminGlobalAuditLogPage() {
         entry.entity_type || "",
         entry.entity_id || "",
         entry.actor_id || "",
-        entry.target_user_id || "",
-        Object.entries(entry.details || {})
-          .map(([key, value]) =>
-            `${getDetailLabel(key)}: ${getDetailValue(value)}`
-          )
-          .join("; "),
         entry.id
       ]);
+
 
       // Convert the headers and records to CSV.
       const csv = "\uFEFF" + [headers, ...rows]
@@ -517,7 +516,7 @@ function AdminGlobalAuditLogPage() {
             <button
               type="button"
               className="global-audit-clear-button"
-              onClick={handleExportCSV}
+              onClick={() => exportDialogRef.current?.showModal()}
               disabled={exporting || loading || total === 0}
             >
               {exporting ? "Exporting..." : "Export to CSV"}
@@ -525,6 +524,66 @@ function AdminGlobalAuditLogPage() {
           </div>
 
         </form>
+
+        {/* Custom confirmation popup for CSV exports */}
+        <dialog
+          ref={exportDialogRef}
+          className="audit-export-modal"
+          aria-labelledby="audit-export-title"
+          aria-describedby="audit-export-description"
+        >
+          <div className="audit-export-header">
+            <div className="audit-export-icon" aria-hidden="true">
+              !
+            </div>
+
+            <div>
+              <p className="audit-export-label">
+                CONFIDENTIAL EXPORT
+              </p>
+              <h2 id="audit-export-title">Export Audit Log?</h2>
+            </div>
+          </div>
+
+          <p
+            id="audit-export-description"
+            className="audit-export-description"
+          >
+            You're about to download audit records that may
+            contain sensitive user and patient-related information.
+          </p>
+
+          <div className="audit-export-notice">
+            <strong>Security Reminder</strong>
+            <p>
+              Only export records when authorized. Store downloaded
+              files securely and do not share them with
+              unauthorized individuals.
+            </p>
+          </div>
+
+          <div className="audit-export-actions">
+            <button
+              type="button"
+              className="audit-export-cancel"
+              onClick={() => exportDialogRef.current?.close()}
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              className="audit-export-confirm"
+              onClick={() => {
+                exportDialogRef.current?.close();
+                handleExportCSV();
+              }}
+            >
+              Export CSV
+            </button>
+          </div>
+        </dialog>
+
         {exportError && <p role="alert">{exportError}</p>}
 
         {!loading && !error && actionBreakdown.length > 0 && (
