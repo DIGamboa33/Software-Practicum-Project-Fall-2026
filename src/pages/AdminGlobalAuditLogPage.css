@@ -28,7 +28,7 @@
   border-radius: 8px;
 }
 
-.audit-event-fields > div {
+.audit-event-fields>div {
   display: grid;
   gap: 4px;
 }
@@ -71,10 +71,7 @@
 .global-audit-filters {
   display: grid;
   grid-template-columns:
-    minmax(180px, 1.4fr)
-    minmax(130px, 0.8fr)
-    minmax(180px, 1.2fr)
-    auto;
+    minmax(180px, 1.4fr) minmax(130px, 0.8fr) minmax(180px, 1.2fr) auto;
   align-items: end;
   gap: 14px;
   margin: 24px 0;
@@ -155,4 +152,122 @@
   .global-audit-filters {
     grid-template-columns: 1fr;
   }
+}
+
+
+/* Custom CSV Export Confirmation Modal */
+
+.audit-export-modal {
+  width: min(440px, calc(100% - 32px));
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 28px;
+  border: none;
+  border-radius: 16px;
+  background: white;
+  color: #35415e;
+  box-shadow: 0 24px 70px rgba(18, 30, 60, 0.25);
+}
+
+/* Darken the page behind the modal. */
+.audit-export-modal::backdrop {
+  background: rgba(15, 25, 50, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+.audit-export-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.audit-export-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: #fff4dc;
+  color: #ad792b;
+  font-size: 25px;
+  font-weight: 700;
+}
+
+.audit-export-label {
+  margin: 0 0 5px;
+  color: #8793a5;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.audit-export-header h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #253451;
+}
+
+.audit-export-description {
+  margin: 0 0 20px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #53627f;
+}
+
+.audit-export-notice {
+  padding: 16px;
+  border-radius: 10px;
+  background: #f6f8fc;
+}
+
+.audit-export-notice strong {
+  font-size: 13px;
+  color: #35415e;
+}
+
+.audit-export-notice p {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #65728a;
+}
+
+.audit-export-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 26px;
+}
+
+.audit-export-cancel,
+.audit-export-confirm {
+  padding: 11px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.audit-export-cancel {
+  background: white;
+  border: 1px solid #d9dfeb;
+  color: #53627f;
+}
+
+.audit-export-cancel:hover {
+  background: #f3f6fb;
+}
+
+.audit-export-confirm {
+  background: #61d6c2;
+  color: #17233c;
+  border: 1px solid #61d6c2;
+}
+
+.audit-export-confirm:hover {
+  background: #4dc4b1;
 }
