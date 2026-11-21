@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { fetchGlobalAuditLog } from "../lib/api";
+import { fetchGlobalAuditLog, recordAuditLogExport } from "../lib/api";
 import Pagination from "../components/Pagination";
 import "./AdminGlobalAuditLogPage.css";
 
@@ -30,7 +30,8 @@ function getActionLabel(entry) {
     "student.bulk_invited": "Student Account Created",
     "patient.viewed": "Patient Chart Viewed",
     "classroom.instructor_assigned": "Instructor Assigned to Classroom",
-    "classroom.instructor_removed": "Instructor Removed from Classroom"
+    "classroom.instructor_removed": "Instructor Removed from Classroom",
+    "audit.export_initiated": "Audit Log CSV Export Initiated"
   };
 
   // Instructor reviews can have two different outcomes.
@@ -114,7 +115,10 @@ function getActionDescription(entry) {
 
     case "classroom.instructor_removed":
       return "An administrator removed an instructor from a classroom.";
-    
+
+    case "audit.export_initiated":
+      return `An administrator initiated a CSV export of ${entry.details?.recordCount ?? "unknown"} audit records.`;
+
     default:
       return `${getActionLabel(entry)} was recorded in the system.`;
   }
@@ -168,6 +172,18 @@ function getDetailValue(value) {
 }
 
 
+function escapeCSV(value) {
+  let text = String(value ?? "");
+
+  // Prevent spreadsheet formulas from running.
+  if (/^\s*[=+\-@]/.test(text)) {
+    text = "'" + text;
+  }
+
+  // Handle commas, quotes, and line breaks.
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
 
 
 function AdminGlobalAuditLogPage() {
@@ -188,6 +204,10 @@ function AdminGlobalAuditLogPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRole, setSelectedRole] = useState("all");
   const [selectedAction, setSelectedAction] = useState("all");
+
+  //CSV export state
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
 
   // Load the events whenever the page number changes.
   useEffect(() => {
@@ -277,6 +297,118 @@ function AdminGlobalAuditLogPage() {
     setPage(1);
   }
 
+
+  async function handleExportCSV() {
+    setExporting(true);
+    setExportError("");
+
+    try {
+      const allLogs = [];
+      let currentPage = 1;
+      let totalLogs = 0;
+
+      // Load every page using our existing Admin API.
+      do {
+        const result = await fetchGlobalAuditLog(currentPage, {
+          pageSize: 50,
+          search: searchTerm,
+          role: selectedRole,
+          action: selectedAction
+        });
+
+        totalLogs = result.total;
+
+        if (totalLogs > 50000) {
+          throw new Error("Too many records to export at once.");
+        }
+
+        allLogs.push(...result.logs);
+
+        if (result.logs.length === 0) break;
+
+        currentPage++;
+      } while (allLogs.length < totalLogs && currentPage <= 1000);
+
+      if (allLogs.length < totalLogs) {
+        throw new Error("Could not retrieve all audit records.");
+      }
+
+      const timeZone =
+        Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+      const headers = [
+        `Date & Time (${timeZone})`,
+        "Performed By",
+        "Role",
+        "Action",
+        "Description",
+        "Record Type",
+        "Record ID",
+        "User ID",
+        "Affected User ID",
+        "Details",
+        "Audit Event ID"
+      ];
+
+      const rows = allLogs.map((entry) => [
+        new Date(entry.created_at).toLocaleString(),
+        entry.actor_name || "Unknown User",
+        entry.actor_role || "Unknown",
+        getActionLabel(entry),
+        getActionDescription(entry),
+        entry.entity_type || "",
+        entry.entity_id || "",
+        entry.actor_id || "",
+        entry.target_user_id || "",
+        Object.entries(entry.details || {})
+          .map(([key, value]) =>
+            `${getDetailLabel(key)}: ${getDetailValue(value)}`
+          )
+          .join("; "),
+        entry.id
+      ]);
+
+      // Convert the headers and records to CSV.
+      const csv = "\uFEFF" + [headers, ...rows]
+        .map((row) => row.map(escapeCSV).join(","))
+        .join("\r\n");
+
+
+      // Record this export before starting the download.
+      await recordAuditLogExport({
+        search: searchTerm,
+        role: selectedRole,
+        action: selectedAction,
+        recordCount: allLogs.length
+      });
+
+
+      // Download the file.
+      const file = new Blob([csv], {
+        type: "text/csv;charset=utf-8;"
+      });
+
+      const url = URL.createObjectURL(file);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download =
+        `CareFlow_Audit_Log_${new Date().toISOString().slice(0, 10)}.csv`;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      URL.revokeObjectURL(url);
+
+    } catch (error) {
+      setExportError(error.message || "Export failed.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+
   const actionBreakdown = useMemo(() => {
     const totals = logs.reduce((counts, entry) => {
       const label = getActionLabel(entry);
@@ -365,6 +497,7 @@ function AdminGlobalAuditLogPage() {
               <option value="classroom.created">Classroom Created</option>
               <option value="student.bulk_invited">Student Account Created</option>
               <option value="patient.viewed">Patient Chart Viewed</option>
+              <option value="audit.export_initiated">Audit Log CSV Export Initiated</option>
             </select>
           </label>
 
@@ -380,9 +513,19 @@ function AdminGlobalAuditLogPage() {
             >
               Clear
             </button>
+
+            <button
+              type="button"
+              className="global-audit-clear-button"
+              onClick={handleExportCSV}
+              disabled={exporting || loading || total === 0}
+            >
+              {exporting ? "Exporting..." : "Export to CSV"}
+            </button>
           </div>
 
         </form>
+        {exportError && <p role="alert">{exportError}</p>}
 
         {!loading && !error && actionBreakdown.length > 0 && (
           <section className="audit-analytics panel">

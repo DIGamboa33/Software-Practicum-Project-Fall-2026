@@ -159,6 +159,18 @@ export function fetchGlobalAuditLog(page = 1, filters = {}) {
 }
 
 
+//
+// Record when an administrator exports audit records.
+//
+export function recordAuditLogExport(exportInfo) {
+  return adminRequest("/global-audit-log/export-event", {
+    method: "POST",
+    body: JSON.stringify(exportInfo)
+  });
+}
+
+
+
 export function fetchAdminAcademics() {
   return adminRequest("/academics");
 }
