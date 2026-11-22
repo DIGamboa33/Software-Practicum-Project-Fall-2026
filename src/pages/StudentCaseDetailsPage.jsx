@@ -203,6 +203,12 @@ export default function StudentCaseDetailPage({
   const [ordersList, setOrdersList] = useState([])
   const [selectedLabOrderModal, setSelectedLabOrderModal] = useState(null);
 
+  const [attachedVitalId, setAttachedVitalId] = useState(null);
+  const [attachedLabOrderIds, setAttachedLabOrderIds] = useState([]);
+  const [isVitalPickerOpen, setIsVitalPickerOpen] = useState(false);
+  const [isLabOrderPickerOpen, setIsLabOrderPickerOpen] = useState(false);
+  const [pickerError, setPickerError] = useState("");
+
   useEffect(() => {
     let active = true;
 
@@ -459,6 +465,53 @@ export default function StudentCaseDetailPage({
     await deleteStudentLabOrder(orderId);
     setOrdersList((prev) => prev.filter((o) => o.id !== orderId));
   };
+
+  const attachedVital =
+  vitalsList.find((v) => String(v.id) === String(attachedVitalId)) ?? null;
+
+const attachedLabOrders = ordersList.filter((order) =>
+  attachedLabOrderIds.some((id) => String(id) === String(order.id)),
+);
+
+function normalizeTestName(name) {
+  return String(name ?? "").trim().toLowerCase();
+}
+
+function handleSelectVital(vitalId) {
+  setPickerError("");
+  setAttachedVitalId((prev) => (String(prev) === String(vitalId) ? null : vitalId));
+  setIsVitalPickerOpen(false);
+}
+
+function handleToggleLabOrder(order) {
+  setPickerError("");
+  const exists = attachedLabOrderIds.some(
+    (id) => String(id) === String(order.id),
+  );
+
+  if (exists) {
+    setAttachedLabOrderIds((prev) =>
+      prev.filter((id) => String(id) !== String(order.id)),
+    );
+    return;
+  }
+
+  const candidateKey = normalizeTestName(order.test_name);
+  const duplicate = attachedLabOrders.some(
+    (selected) =>
+      String(selected.id) !== String(order.id) &&
+      normalizeTestName(selected.test_name) === candidateKey,
+  );
+
+  if (candidateKey && duplicate) {
+    setPickerError(
+      `"${order.test_name.trim()}" is already selected for this submission. Remove the existing one first to avoid duplicate test names.`,
+    );
+    return;
+  }
+
+  setAttachedLabOrderIds((prev) => [...prev, order.id]);
+}
 
 
   const allergies = patient.allergies;
@@ -1131,17 +1184,410 @@ export default function StudentCaseDetailPage({
             </div>
           )}
 
-          {tab === "Notes" && (
-            <>
-            <InstructorFeedback grading={grading} />
-            <PharmacyNotesPage
-              selectedCaseId={patient.id}
-              user={user}
-              onNavigate={onNavigate}
-              embedded
-            />
-            </>
+        {tab === "Notes" && (
+  <>
+    <InstructorFeedback grading={grading} />
+    <PharmacyNotesPage
+      selectedCaseId={patient.id}
+      user={user}
+      onNavigate={onNavigate}
+      embedded
+    />
+
+    <Card
+      title="Submission Attachments (Vitals & Lab Orders)"
+      fullWidth
+      action={
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => {
+              setPickerError("");
+              setIsVitalPickerOpen(true);
+            }}
+          >
+            {attachedVital ? "Change Vital Entry" : "Select Vital Entry (Optional)"}
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => {
+              setPickerError("");
+              setIsLabOrderPickerOpen(true);
+            }}
+          >
+            Select Lab Orders (Optional)
+          </button>
+        </div>
+      }
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: 16,
+        }}
+      >
+        <div
+          style={{
+            border: "1px solid #e5e9f0",
+            borderRadius: 10,
+            padding: 14,
+            background: "#f9fbff",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 8,
+            }}
+          >
+            <strong style={{ fontSize: 13 }}>Attached Vital Entry (Max 1)</strong>
+            {attachedVital && (
+              <button
+                type="button"
+                className="text-button text-button--danger"
+                onClick={() => setAttachedVitalId(null)}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+          {attachedVital ? (
+            <p className="case-help-text" style={{ margin: 0 }}>
+              {formatDate(attachedVital.recorded_at ?? attachedVital.created_at)} —{" "}
+              {attachedVital.systolic && attachedVital.diastolic
+                ? `BP ${attachedVital.systolic}/${attachedVital.diastolic} mmHg`
+                : "BP N/A"}
+              {attachedVital.heart_rate ? `, HR ${attachedVital.heart_rate} bpm` : ""}
+              {attachedVital.spo2 ? `, SpO2 ${attachedVital.spo2}%` : ""}
+            </p>
+          ) : (
+            <p className="case-help-text" style={{ margin: 0 }}>
+              No vital entry selected.
+            </p>
           )}
+        </div>
+
+        <div
+          style={{
+            border: "1px solid #e5e9f0",
+            borderRadius: 10,
+            padding: 14,
+            background: "#f9fbff",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 8,
+            }}
+          >
+            <strong style={{ fontSize: 13 }}>
+              Attached Lab Orders ({attachedLabOrders.length})
+            </strong>
+            {attachedLabOrders.length > 0 && (
+              <button
+                type="button"
+                className="text-button text-button--danger"
+                onClick={() => setAttachedLabOrderIds([])}
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+          {attachedLabOrders.length > 0 ? (
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {attachedLabOrders.map((order) => (
+                <li
+                  key={order.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 8,
+                    marginBottom: 6,
+                    fontSize: 13,
+                  }}
+                >
+                  <span>
+                    <strong>{order.test_name}</strong>{" "}
+                    <span className="case-help-text">
+                      ({order.category || "General"} · {order.priority || "Routine"})
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    className="text-button text-button--danger"
+                    onClick={() =>
+                      setAttachedLabOrderIds((prev) =>
+                        prev.filter((id) => String(id) !== String(order.id)),
+                      )
+                    }
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="case-help-text" style={{ margin: 0 }}>
+              No lab orders selected.
+            </p>
+          )}
+        </div>
+      </div>
+    </Card>
+
+    {isVitalPickerOpen && (
+      <div
+        style={{
+          position: "fixed",
+          inset:0,
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          overflowX: "hidden",
+          background: "rgba(0, 0, 0, 0.5)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000,
+        }}
+      >
+        <div
+          className="panel data-panel"
+          style={{
+            width: "100%",
+            maxWidth: 560,
+            padding: 24,
+            background: "#fff",
+            borderRadius: 12,
+            maxHeight: "85vh",
+            overflowY: "auto",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 12,
+            }}
+          >
+            <h2 style={{ margin: 0, fontSize: 18 }}>Select Vital Entry (Choose 1)</h2>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setIsVitalPickerOpen(false)}
+              style={{ padding: "4px 8px" }}
+            >
+              ✕
+            </button>
+          </div>
+          <p className="case-help-text" style={{ marginBottom: 12 }}>
+            Condensed case vitals list. Selecting a vital replaces any previously chosen vital.
+          </p>
+
+          {vitalsList.length === 0 ? (
+            <p className="case-help-text">No vitals recorded for this case yet.</p>
+          ) : (
+            <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+              {vitalsList.map((vital) => {
+                const isSelected = String(vital.id) === String(attachedVitalId);
+                return (
+                  <div
+                    key={vital.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 12,
+                      padding: 12,
+                      borderRadius: 8,
+                      border: `1px solid ${isSelected ? MINT : "#e2e8f0"}`,
+                      background: isSelected ? "#eefcf8" : "#fff",
+                    }}
+                  >
+                    <div style={{ fontSize: 13 }}>
+                      <strong>
+                        {formatDate(vital.recorded_at ?? vital.created_at)}
+                      </strong>
+                      <div className="case-help-text">
+                        BP:{" "}
+                        {vital.systolic && vital.diastolic
+                          ? `${vital.systolic}/${vital.diastolic}`
+                          : "—"}{" "}
+                        | HR: {vital.heart_rate ?? "—"} | SpO2:{" "}
+                        {vital.spo2 ?? "—"}% | Temp: {vital.temperature ?? "—"}°F
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className={isSelected ? "secondary-button" : "primary-button"}
+                      onClick={() => handleSelectVital(vital.id)}
+                    >
+                      {isSelected ? "Selected" : "Select"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            {attachedVitalId != null && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setAttachedVitalId(null);
+                  setIsVitalPickerOpen(false);
+                }}
+              >
+                Clear Selection
+              </button>
+            )}
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setIsVitalPickerOpen(false)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {isLabOrderPickerOpen && (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          overflowX: "hidden",
+          background: "rgba(0, 0, 0, 0.5)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000,
+        }}
+      >
+        <div
+          className="panel data-panel"
+          style={{
+            width: "100%",
+            maxWidth: 600,
+            padding: 24,
+            background: "#fff",
+            borderRadius: 12,
+            maxHeight: "85vh",
+            overflowY: "auto",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 12,
+            }}
+          >
+            <h2 style={{ margin: 0, fontSize: 18 }}>
+              Select Lab Orders ({attachedLabOrderIds.length} selected)
+            </h2>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => {
+                setPickerError("");
+                setIsLabOrderPickerOpen(false);
+              }}
+              style={{ padding: "4px 8px" }}
+            >
+              ✕
+            </button>
+          </div>
+          <p className="case-help-text" style={{ marginBottom: 12 }}>
+            Select one or more lab orders with distinct test names.
+          </p>
+
+          {pickerError && (
+            <p role="alert" style={{ color: "#d9534f", fontSize: 13, marginBottom: 12 }}>
+              {pickerError}
+            </p>
+          )}
+
+          {ordersList.length === 0 ? (
+            <p className="case-help-text">No lab orders available for this case yet.</p>
+          ) : (
+            <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+              {ordersList.map((order) => {
+                const isChecked = attachedLabOrderIds.some(
+                  (id) => String(id) === String(order.id),
+                );
+                return (
+                  <label
+                    key={order.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      padding: 12,
+                      borderRadius: 8,
+                      border: `1px solid ${isChecked ? MINT : "#e2e8f0"}`,
+                      background: isChecked ? "#eefcf8" : "#fff",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleToggleLabOrder(order)}
+                      />
+                      <div>
+                        <strong style={{ fontSize: 13 }}>{order.test_name}</strong>
+                        <div className="case-help-text">
+                          {order.category || "General"} · {order.priority || "Routine"} ·{" "}
+                          {order.status || "Draft"}
+                        </div>
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => {
+                setPickerError("");
+                setIsLabOrderPickerOpen(false);
+              }}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </>
+)}
 
           {tab === "Appointments" && (
             <Card title="Appointments">

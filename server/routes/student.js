@@ -2229,4 +2229,309 @@ studentRouter.get("/assignments/:assignmentId/grading", async (request, response
   }
 });
 
+async function getOwnedNoteForAttachments(request, response, noteId) {
+  const authorization = request.headers.authorization;
+  if (!authorization?.startsWith("Bearer ")) {
+    response.status(401).json({ message: "Authentication required." });
+    return null;
+  }
+
+  const accessToken = authorization.slice(7);
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser(accessToken);
+
+  if (authError || !user) {
+    response.status(401).json({ message: "Invalid or expired session." });
+    return null;
+  }
+
+  const supabaseAdmin = getSupabaseAdmin();
+  const learning = supabaseAdmin.schema("learning");
+
+  const { data: note, error: noteError } = await learning
+    .from("notes")
+    .select("id, assignment_id, status")
+    .eq("id", noteId)
+    .maybeSingle();
+
+  if (noteError) {
+    console.error("Unable to load note:", noteError.message);
+    response.status(500).json({ message: "Unable to load note." });
+    return null;
+  }
+
+  if (!note) {
+    response.status(404).json({ message: "Note not found." });
+    return null;
+  }
+
+  const { data: assignment, error: assignmentError } = await learning
+    .from("student_case_assignments")
+    .select("id, assignment_id:id")
+    .eq("id", note.assignment_id)
+    .eq("student_id", user.id)
+    .maybeSingle();
+
+  if (assignmentError) {
+    console.error("Unable to verify assignment:", assignmentError.message);
+    response.status(500).json({ message: "Unable to verify case assignment." });
+    return null;
+  }
+
+  if (!assignment) {
+    response.status(403).json({ message: "You do not have access to this note." });
+    return null;
+  }
+
+  return { supabaseAdmin, learning, user, note };
+}
+
+studentRouter.get("/notes/:noteId/attachments", async (request, response) => {
+  try {
+    const context = await getOwnedNoteForAttachments(
+      request,
+      response,
+      request.params.noteId,
+    );
+    if (!context) return;
+
+    const { learning, note } = context;
+
+    const [
+      linkedVitalsRes,
+      linkedLabOrdersRes,
+      assignmentVitalsRes,
+      assignmentLabOrdersRes,
+    ] = await Promise.all([
+      learning
+        .from("note_vitals")
+        .select("vital_id")
+        .eq("note_id", note.id),
+      learning
+        .from("note_lab_orders")
+        .select("lab_order_id")
+        .eq("note_id", note.id),
+      learning
+        .from("vitals")
+        .select("*")
+        .eq("assignment_id", note.assignment_id)
+        .order("recorded_at", { ascending: false }),
+      learning
+        .from("lab_orders")
+        .select("*")
+        .eq("assignment_id", note.assignment_id)
+        .order("ordered_at", { ascending: false }),
+    ]);
+
+    const queryError =
+      linkedVitalsRes.error ||
+      linkedLabOrdersRes.error ||
+      assignmentVitalsRes.error ||
+      assignmentLabOrdersRes.error;
+
+    if (queryError) {
+      console.error("Unable to load note attachments:", queryError.message);
+      return response.status(500).json({ message: "Unable to load note attachments." });
+    }
+
+    const linkedVitalIdSet = new Set(
+      (linkedVitalsRes.data || []).map((row) => Number(row.vital_id)),
+    );
+    const linkedLabOrderIdSet = new Set(
+      (linkedLabOrdersRes.data || []).map((row) => Number(row.lab_order_id)),
+    );
+
+    const vitals = assignmentVitalsRes.data || [];
+    const labOrders = assignmentLabOrdersRes.data || [];
+
+    const attachedVitals = vitals.filter((v) => linkedVitalIdSet.has(Number(v.id)));
+    const attachedLabOrders = labOrders.filter((o) =>
+      linkedLabOrderIdSet.has(Number(o.id)),
+    );
+
+    return response.json({
+      noteId: note.id,
+      vitalId: attachedVitals[0]?.id ?? null,
+      vitals: attachedVitals,
+      labOrderIds: attachedLabOrders.map((o) => o.id),
+      labOrders: attachedLabOrders,
+      availableVitals: vitals,
+      availableLabOrders: labOrders,
+    });
+  } catch (error) {
+    console.error("Error fetching note attachments:", error);
+    return response.status(500).json({ message: "Unable to load note attachments." });
+  }
+});
+
+studentRouter.put("/notes/:noteId/attachments", async (request, response) => {
+  try {
+    const context = await getOwnedNoteForAttachments(
+      request,
+      response,
+      request.params.noteId,
+    );
+    if (!context) return;
+
+    const { supabaseAdmin, learning, user, note } = context;
+
+    if (["Pending Review", "Approved"].includes(note.status)) {
+      return response.status(409).json({
+        message:
+          "Attachments are locked while this note is under review or approved.",
+      });
+    }
+
+    if (!["Draft", "Returned"].includes(note.status)) {
+      return response.status(409).json({
+        message: "Attachments cannot be updated in this note status.",
+      });
+    }
+
+    const body = request.body || {};
+    const rawVitalId = body.vitalId ?? null;
+    const rawLabOrderIds = Array.isArray(body.labOrderIds) ? body.labOrderIds : null;
+
+    if (
+      rawVitalId !== null &&
+      rawVitalId !== "" &&
+      (!Number.isSafeInteger(Number(rawVitalId)) || Number(rawVitalId) <= 0)
+    ) {
+      return response.status(400).json({ message: "Invalid vital selection." });
+    }
+
+    if (rawLabOrderIds === null) {
+      return response.status(400).json({ message: "labOrderIds must be an array." });
+    }
+
+    const normalizedLabOrderIds = [];
+    for (const rawId of rawLabOrderIds) {
+      const numId = Number(rawId);
+      if (!Number.isSafeInteger(numId) || numId <= 0) {
+        return response.status(400).json({ message: "Invalid lab order ID." });
+      }
+      if (!normalizedLabOrderIds.includes(numId)) {
+        normalizedLabOrderIds.push(numId);
+      }
+    }
+
+    const vitalId =
+      rawVitalId === null || rawVitalId === "" ? null : Number(rawVitalId);
+
+    // Verify selected vital (at most 1) belongs to this assignment
+    let selectedVital = null;
+    if (vitalId !== null) {
+      const { data: vitalRow, error: vitalError } = await learning
+        .from("vitals")
+        .select("*")
+        .eq("id", vitalId)
+        .eq("assignment_id", note.assignment_id)
+        .maybeSingle();
+
+      if (vitalError) throw vitalError;
+      if (!vitalRow) {
+        return response.status(400).json({
+          message: "Selected vital entry does not belong to this case assignment.",
+        });
+      }
+      selectedVital = vitalRow;
+    }
+
+    // Verify selected lab orders belong to this assignment and have no duplicate test_name
+    let selectedLabOrders = [];
+    if (normalizedLabOrderIds.length > 0) {
+      const { data: orderRows, error: ordersError } = await learning
+        .from("lab_orders")
+        .select("*")
+        .eq("assignment_id", note.assignment_id)
+        .in("id", normalizedLabOrderIds);
+
+      if (ordersError) throw ordersError;
+
+      if ((orderRows || []).length !== normalizedLabOrderIds.length) {
+        return response.status(400).json({
+          message: "One or more selected lab orders do not belong to this case assignment.",
+        });
+      }
+
+      const byId = new Map((orderRows || []).map((row) => [Number(row.id), row]));
+      selectedLabOrders = normalizedLabOrderIds.map((id) => byId.get(id)).filter(Boolean);
+
+      const seenTestNames = new Set();
+      for (const order of selectedLabOrders) {
+        const key = String(order.test_name || "").trim().toLowerCase();
+        if (!key) continue;
+        if (seenTestNames.has(key)) {
+          return response.status(400).json({
+            message: `Duplicate lab test "${order.test_name.trim()}" cannot be attached to the same note.`,
+          });
+        }
+        seenTestNames.add(key);
+      }
+    }
+
+    // Replace note_vitals rows for this note
+    const { error: deleteVitalsError } = await learning
+      .from("note_vitals")
+      .delete()
+      .eq("note_id", note.id);
+    if (deleteVitalsError) throw deleteVitalsError;
+
+    if (selectedVital) {
+      const { error: insertVitalError } = await learning
+        .from("note_vitals")
+        .insert({ note_id: note.id, vital_id: selectedVital.id });
+      if (insertVitalError) throw insertVitalError;
+    }
+
+    // Replace note_lab_orders rows for this note
+    const { error: deleteOrdersError } = await learning
+      .from("note_lab_orders")
+      .delete()
+      .eq("note_id", note.id);
+    if (deleteOrdersError) throw deleteOrdersError;
+
+    if (selectedLabOrders.length > 0) {
+      const { error: insertOrdersError } = await learning
+        .from("note_lab_orders")
+        .insert(
+          selectedLabOrders.map((order) => ({
+            note_id: note.id,
+            lab_order_id: order.id,
+          })),
+        );
+      if (insertOrdersError) throw insertOrdersError;
+    }
+
+    try {
+      await writeAuditLog(supabaseAdmin, {
+        actor_id: user.id,
+        action: "note.attachments_updated",
+        entity_type: "clinical_note",
+        entity_id: String(note.id),
+        details: {
+          assignment_id: note.assignment_id,
+          vital_id: selectedVital?.id ?? null,
+          lab_order_ids: selectedLabOrders.map((o) => o.id),
+        },
+      });
+    } catch (auditError) {
+      console.error("Unable to record note attachment update:", auditError);
+    }
+
+    return response.json({
+      message: "Note attachments saved.",
+      noteId: note.id,
+      vitalId: selectedVital?.id ?? null,
+      vitals: selectedVital ? [selectedVital] : [],
+      labOrderIds: selectedLabOrders.map((o) => o.id),
+      labOrders: selectedLabOrders,
+    });
+  } catch (error) {
+    console.error("Error updating note attachments:", error);
+    return response.status(500).json({ message: "Unable to save note attachments." });
+  }
+});
 export default studentRouter;
