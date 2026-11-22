@@ -1,3 +1,4 @@
+import { SIMULATION_STEPS, openStep } from "../services/simulationSteps.js";
 import { Router } from "express";
 import { getSupabaseAdmin, supabase } from "../services/supabase.js";
 import { writeAuditLog } from "../services/auditLog.js";
