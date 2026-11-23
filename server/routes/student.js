@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { supabase, getSupabaseAdmin } from "../services/supabase.js";
 import { writeAuditLog } from "../services/auditLog.js";
+import { SIMULATION_STEPS, SHARED_KEY_BY_STEP, openStep, stepRequirementProblems } from "../services/simulationSteps.js";
 
 const studentRouter = Router();
 
@@ -2226,6 +2227,234 @@ studentRouter.get("/assignments/:assignmentId/grading", async (request, response
     console.error("Unable to load grading:", error.message || error);
 
     return response.status(500).json({ message: "Unable to load grading." });
+  }
+});
+
+// ---- Simulation (shared encounter) ----
+async function loadSimulationStep(request, response) {
+  const token = (request.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!token) {
+    response.status(401).json({ message: "Missing access token." });
+    return null;
+  }
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData?.user) {
+    response.status(401).json({ message: "Your session has expired." });
+    return null;
+  }
+
+  const admin = getSupabaseAdmin();
+  const learning = admin.schema("learning");
+  const { data: step, error } = await learning
+    .from("simulation_steps")
+    .select("id, encounter_id, step_key, step_order, student_id, status, assignment_id")
+    .eq("assignment_id", request.params.assignmentId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!step) {
+    response.status(404).json({ message: "This assignment is not part of a simulation." });
+    return null;
+  }
+  if (step.student_id !== authData.user.id) {
+    response.status(403).json({ message: "You do not have access to this case." });
+    return null;
+  }
+  return { admin, learning, step };
+}
+
+// The whole encounter as this student should see it:
+studentRouter.get("/assignments/:assignmentId/encounter", async (request, response) => {
+  try {
+    const ctx = await loadSimulationStep(request, response);
+    if (!ctx) return;
+    const { admin, learning, step } = ctx;
+
+    const [encounterResult, stepsResult] = await Promise.all([
+      learning
+        .from("simulation_encounters")
+        .select("id, case_id, status, shared_data, referral_subrole_id")
+        .eq("id", step.encounter_id)
+        .single(),
+      learning
+        .from("simulation_steps")
+        .select("step_key, step_order, student_id, assignment_id, status, completed_at")
+        .eq("encounter_id", step.encounter_id)
+        .order("step_order"),
+    ]);
+    if (encounterResult.error) throw encounterResult.error;
+    if (stepsResult.error) throw stepsResult.error;
+
+    const studentIds = [...new Set(stepsResult.data.map((s) => s.student_id))];
+    const { data: people, error: peopleError } = await admin
+      .from("profiles")
+      .select("id, first_name, last_name")
+      .in("id", studentIds);
+    if (peopleError) throw peopleError;
+    const nameById = new Map(
+      (people || []).map((p) => [p.id, `${p.first_name || ""} ${p.last_name || ""}`.trim()]),
+    );
+    const labelByKey = new Map(SIMULATION_STEPS.map((d) => [d.key, d.label]));
+    const encounter = encounterResult.data;
+
+    return response.json({
+      encounterId: encounter.id,
+      caseId: encounter.case_id,
+      status: encounter.status,
+      sharedData: encounter.shared_data || {},
+      referralSubroleId: encounter.referral_subrole_id,
+      current: {
+        stepKey: step.step_key,
+        stepOrder: step.step_order,
+        status: step.status,
+        canEdit: step.status === "open" && encounter.status === "active",
+      },
+      steps: stepsResult.data.map((s) => ({
+        order: s.step_order,
+        key: s.step_key,
+        label: labelByKey.get(s.step_key) || s.step_key,
+        status: s.status,
+        studentName: nameById.get(s.student_id) || "Unknown student",
+        isMine: s.step_order === step.step_order,
+      })),
+      // Lets the vitals/notes/labs routes read everything in this encounter
+      assignmentIds: stepsResult.data.map((s) => s.assignment_id).filter(Boolean),
+    });
+  } catch (error) {
+    console.error("Unable to load simulation encounter:", error);
+    return response.status(500).json({ message: "Unable to load this simulation." });
+  }
+});
+
+// Save this step's data into its own key of shared_data:
+studentRouter.patch("/assignments/:assignmentId/encounter-data", async (request, response) => {
+  try {
+    const ctx = await loadSimulationStep(request, response);
+    if (!ctx) return;
+    const { learning, step } = ctx;
+
+    const data = request.body?.data;
+    if (!data || typeof data !== "object" || Array.isArray(data) || JSON.stringify(data).length > 20000) {
+      return response.status(400).json({ message: "Send the fields to save as an object." });
+    }
+    if (step.status !== "open") {
+      return response.status(409).json({ message: "This step is not open." });
+    }
+
+    const { data: encounter, error: encounterError } = await learning
+      .from("simulation_encounters")
+      .select("id, status, shared_data")
+      .eq("id", step.encounter_id)
+      .single();
+    if (encounterError) throw encounterError;
+    if (encounter.status !== "active") {
+      return response.status(409).json({ message: "This simulation is already finished." });
+    }
+
+    const key = SHARED_KEY_BY_STEP[step.step_key];
+    const current = encounter.shared_data || {};
+    const merged = { ...current, [key]: { ...(current[key] || {}), ...data } };
+
+    const { error: updateError } = await learning
+      .from("simulation_encounters")
+      .update({ shared_data: merged, updated_at: new Date().toISOString() })
+      .eq("id", encounter.id);
+    if (updateError) throw updateError;
+
+    return response.json({ sharedData: merged, message: "Saved." });
+  } catch (error) {
+    console.error("Unable to save encounter data:", error);
+    return response.status(500).json({ message: "Unable to save your changes." });
+  }
+});
+
+// Finish this step and open the next one for the next student:
+studentRouter.post("/assignments/:assignmentId/complete-step", async (request, response) => {
+  try {
+    const ctx = await loadSimulationStep(request, response);
+    if (!ctx) return;
+    const { learning, step } = ctx;
+
+    if (step.status !== "open") {
+      return response.status(409).json({ message: "This step is not open." });
+    }
+
+    const { data: encounter, error: encounterError } = await learning
+      .from("simulation_encounters")
+      .select("id, status, shared_data")
+      .eq("id", step.encounter_id)
+      .single();
+    if (encounterError) throw encounterError;
+    if (encounter.status !== "active") {
+      return response.status(409).json({ message: "This simulation is already finished." });
+    }
+
+    const problems = await stepRequirementProblems(learning, {
+      step,
+      assignmentId: step.assignment_id,
+      sharedData: encounter.shared_data || {},
+    });
+    if (problems.length) {
+      return response.status(400).json({ message: problems[0], problems });
+    }
+
+    // Mark done only if still open:
+    const { data: claimed, error: claimError } = await learning
+      .from("simulation_steps")
+      .update({ status: "done", completed_at: new Date().toISOString() })
+      .eq("id", step.id)
+      .eq("status", "open")
+      .select("id")
+      .maybeSingle();
+    if (claimError) throw claimError;
+    if (!claimed) {
+      return response.status(409).json({ message: "This step was already completed." });
+    }
+
+    const { data: nextStep, error: nextError } = await learning
+      .from("simulation_steps")
+      .select("id, student_id")
+      .eq("encounter_id", step.encounter_id)
+      .eq("step_order", step.step_order + 1)
+      .maybeSingle();
+    if (nextError) throw nextError;
+
+    if (!nextStep) {
+      await learning
+        .from("simulation_encounters")
+        .update({ status: "completed", updated_at: new Date().toISOString() })
+        .eq("id", step.encounter_id);
+      return response.json({ message: "Simulation complete.", completed: true });
+    }
+
+    // The next student gets a normal assignment copied from this one:
+    try {
+      const { data: current, error: currentError } = await learning
+        .from("student_case_assignments")
+        .select("case_id, classroom_id, due_at, note_type")
+        .eq("id", step.assignment_id)
+        .single();
+      if (currentError) throw currentError;
+
+      await openStep(learning, {
+        step: nextStep,
+        caseId: current.case_id,
+        classroomId: current.classroom_id,
+        dueAt: current.due_at,
+        noteType: current.note_type,
+      });
+    } catch (openError) {
+      // Undo "done" so the student isn't stuck with nobody next in line:
+      await learning
+        .from("simulation_steps")
+        .update({ status: "open", completed_at: null })
+        .eq("id", step.id);
+      throw openError;
+    }
+
+    return response.json({ message: "Step completed. The next role has been notified.", completed: false });
+  } catch (error) {
+    console.error("Unable to complete simulation step:", error);
+    return response.status(500).json({ message: "Unable to complete this step." });
   }
 });
 

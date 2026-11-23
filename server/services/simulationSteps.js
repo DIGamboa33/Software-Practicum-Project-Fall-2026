@@ -10,8 +10,8 @@ export const SIMULATION_STEPS = [
 ];
 
 // Creates the normal assignment for a step and marks the step open.
-// Used when the simulation starts (step 1) and by complete-step (later steps).
-export async function openStep(learning, { step, caseId, classroomId, dueAt, noteType }) {
+// Used when the simulation starts (step 1) and by complete-step (later steps)
+export async function openStep(learning, { step, caseId, classroomId, dueAt, noteType, encounterStatus = "Scheduled" }) {
   const { data: assignment, error } = await learning
     .from("student_case_assignments")
     .insert({
@@ -21,6 +21,7 @@ export async function openStep(learning, { step, caseId, classroomId, dueAt, not
       encounter_status: "Scheduled",
       note_type: noteType,
       due_at: dueAt,
+      encounter_status: encounterStatus,
     })
     .select("id")
     .single();
@@ -41,4 +42,49 @@ export async function openStep(learning, { step, caseId, classroomId, dueAt, not
     return null; // someone else already opened it
   }
   return assignment.id;
+}
+
+// Which key of encounter.shared_data each step is allowed to write:
+export const SHARED_KEY_BY_STEP = {
+  front_desk_checkin: "front_desk",
+  nurse_intake: "nurse",
+  provider_visit: "provider",
+  billing: "billing",
+};
+
+// Returns a list of problems. Empty list = this step may be completed.
+// EVERYONE!! make sure the rules work for your assigned step/part
+export async function stepRequirementProblems(learning, { step, assignmentId, sharedData }) {
+  const problems = [];
+  const mine = sharedData?.[SHARED_KEY_BY_STEP[step.step_key]] || {};
+
+  if (step.step_key === "front_desk_checkin") {
+    if (!String(mine.reason_for_visit || "").trim()) problems.push("Enter the reason for the visit.");
+  }
+
+  if (step.step_key === "nurse_intake") {
+    if (!String(mine.chief_complaint || "").trim()) problems.push("Record the chief complaint.");
+    const { count, error } = await learning
+      .from("vitals")
+      .select("*", { count: "exact", head: true })
+      .eq("assignment_id", assignmentId);
+    if (error) throw error;
+    if (!count) problems.push("Save at least one set of vitals.");
+  }
+
+  if (step.step_key === "provider_visit") {
+    const { count, error } = await learning
+      .from("notes")
+      .select("*", { count: "exact", head: true })
+      .eq("assignment_id", assignmentId)
+      .in("status", ["Pending Review", "Approved", "Returned"]);
+    if (error) throw error;
+    if (!count) problems.push("Submit your note before finishing the visit.");
+  }
+
+  if (step.step_key === "billing") {
+    if (!Array.isArray(mine.codes) || mine.codes.length === 0) problems.push("Add at least one billing code.");
+  }
+
+  return problems;
 }
