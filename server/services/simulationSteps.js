@@ -18,10 +18,9 @@ export async function openStep(learning, { step, caseId, classroomId, dueAt, not
       student_id: step.student_id,
       case_id: caseId,
       classroom_id: classroomId,
-      encounter_status: "Scheduled",
+      encounter_status: encounterStatus,
       note_type: noteType,
       due_at: dueAt,
-      encounter_status: encounterStatus,
     })
     .select("id")
     .single();
