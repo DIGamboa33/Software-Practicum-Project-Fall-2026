@@ -1480,7 +1480,7 @@ instructorRouter.post("/classrooms/:classroomId/assignments", async (request, re
       if (profilesError) throw profilesError;
       const subroleById = new Map((studentProfiles || []).map((p) => [p.id, p.sub_role_id]));
       const wrongRole = plan.find(
-        (p) => p.def.subroleId && subroleById.get(p.studentId) !== p.def.subroleId,
+        (p) => !p.def.allowedSubroleIds.includes(subroleById.get(p.studentId)),
       );
       if (wrongRole) {
         return response.status(400).json({
@@ -1554,6 +1554,7 @@ instructorRouter.post("/classrooms/:classroomId/assignments", async (request, re
             case_id: createdCase.id,
             classroom_id: access.classroom.id,
             created_by: profile.id,
+            referral_subrole_id: subroleById.get(plan.find((p) => p.def.key === "provider_visit").studentId),
           })
           .select("id")
           .single();
@@ -1567,7 +1568,7 @@ instructorRouter.post("/classrooms/:classroomId/assignments", async (request, re
               encounter_id: encounter.id,
               step_key: p.def.key,
               step_order: p.def.order,
-              subrole_id: p.def.subroleId,
+              subrole_id: subroleById.get(p.studentId),
               student_id: p.studentId,
             })),
           )

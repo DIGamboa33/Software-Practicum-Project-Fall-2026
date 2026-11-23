@@ -1,9 +1,12 @@
-// The one simulation we support for now. Order matters.
+// Providers who can take the specialist step (everything except Nursing, Front Desk, Biller)
+export const PROVIDER_SUBROLE_IDS = [1, 3, 4, 5, 6, 7, 8, 9];
+
+// for the sake of time, the only provider visit we will support will be from the pharmacy students
 export const SIMULATION_STEPS = [
-  { key: "front_desk_checkin", order: 1, label: "Front desk check-in", subroleId: 10 },
-  { key: "nurse_intake",       order: 2, label: "Nurse intake",        subroleId: 2 },
-  { key: "provider_visit",     order: 3, label: "Specialist visit",    subroleId: null }, // pharmacy id not confirmed
-  { key: "billing",            order: 4, label: "Billing",             subroleId: 11 },
+  { key: "front_desk_checkin", order: 1, label: "Front desk check-in", allowedSubroleIds: [10] },
+  { key: "nurse_intake",       order: 2, label: "Nurse intake",        allowedSubroleIds: [2] },
+  { key: "provider_visit",     order: 3, label: "Specialist visit",    allowedSubroleIds: PROVIDER_SUBROLE_IDS },
+  { key: "billing",            order: 4, label: "Billing",             allowedSubroleIds: [11] },
 ];
 
 // Creates the normal assignment for a step and marks the step open.
