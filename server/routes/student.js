@@ -1679,6 +1679,37 @@ studentRouter.get("/classes/:classroomId", async (request, response) => {
 
 );
 
+// assignment ids this student may read: their own, plus earlier steps of the
+// same simulation, it returns null if the assignment isn't theirs
+async function assignmentIdsForReading(learning, assignmentId, userId) {
+  const { data: own, error: ownError } = await learning
+    .from("student_case_assignments")
+    .select("id")
+    .eq("id", assignmentId)
+    .eq("student_id", userId)
+    .maybeSingle();
+  if (ownError) throw ownError;
+  if (!own) return null;
+
+  const { data: step, error: stepError } = await learning
+    .from("simulation_steps")
+    .select("encounter_id, step_order")
+    .eq("assignment_id", assignmentId)
+    .maybeSingle();
+  if (stepError) throw stepError;
+  if (!step) return [own.id];
+
+  const { data: steps, error: stepsError } = await learning
+    .from("simulation_steps")
+    .select("assignment_id")
+    .eq("encounter_id", step.encounter_id)
+    .lte("step_order", step.step_order)
+    .not("assignment_id", "is", null);
+  if (stepsError) throw stepsError;
+
+  return steps.map((row) => row.assignment_id);
+}
+
 // GET vitals for a specific assignment
 studentRouter.get("/assignments/:assignmentId/vitals", async (request, response) => {
   const authorization = request.headers.authorization;
@@ -1695,13 +1726,17 @@ studentRouter.get("/assignments/:assignmentId/vitals", async (request, response)
   try {
    
     const { assignmentId } = request.params;
-    const supabaseAdmin = getSupabaseAdmin();
+    const learning = getSupabaseAdmin().schema("learning");
 
-    const { data, error } = await supabaseAdmin
-      .schema("learning")
+    const ids = await assignmentIdsForReading(learning, assignmentId, user.id);
+    if (!ids) {
+      return response.status(403).json({ message: "You do not have access to this case." });
+    }
+
+    const { data, error } = await learning
       .from("vitals")
       .select("*")
-      .eq("assignment_id", assignmentId)
+      .in("assignment_id", ids)
       .order("recorded_at", { ascending: false });
 
     if (error) throw error;
@@ -1838,13 +1873,17 @@ studentRouter.get("/assignments/:assignmentId/lab-orders", async (request, respo
 
   try {
     const { assignmentId } = request.params;
-    const supabaseAdmin = getSupabaseAdmin();
+    const learning = getSupabaseAdmin().schema("learning");
 
-    const { data, error } = await supabaseAdmin
-      .schema("learning")
+    const ids = await assignmentIdsForReading(learning, assignmentId, user.id);
+    if (!ids) {
+      return response.status(403).json({ message: "You do not have access to this case." });
+    }
+
+    const { data, error } = await learning
       .from("lab_orders")
       .select("*")
-      .eq("assignment_id", assignmentId)
+      .in("assignment_id", ids)
       .order("ordered_at", { ascending: false });
 
     if (error) throw error;
@@ -2441,6 +2480,7 @@ studentRouter.post("/assignments/:assignmentId/complete-step", async (request, r
         classroomId: current.classroom_id,
         dueAt: current.due_at,
         noteType: current.note_type,
+        encounterStatus: "Checked in",
       });
     } catch (openError) {
       // Undo "done" so the student isn't stuck with nobody next in line:
