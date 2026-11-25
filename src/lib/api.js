@@ -159,6 +159,18 @@ export function fetchGlobalAuditLog(page = 1, filters = {}) {
 }
 
 
+//
+// Record when an administrator exports audit records.
+//
+export function recordAuditLogExport(exportInfo) {
+  return adminRequest("/global-audit-log/export-event", {
+    method: "POST",
+    body: JSON.stringify(exportInfo)
+  });
+}
+
+
+
 export function fetchAdminAcademics() {
   return adminRequest("/academics");
 }
@@ -296,6 +308,17 @@ export function deleteInstructorDraft(id) {
 
 export function fetchInstructorAssignments(classroomId) {
   return instructorRequest(`/classrooms/${classroomId}/assignments`);
+}
+
+export function fetchInstructorAnnouncements(classroomId) {
+  return instructorRequest(`/classrooms/${classroomId}/announcements`);
+}
+
+export function createInstructorAnnouncement(classroomId, announcement) {
+  return instructorRequest(`/classrooms/${classroomId}/announcements`, {
+    method: "POST",
+    body: JSON.stringify(announcement),
+  });
 }
 
 export async function fetchAdminPatients() {
@@ -1110,4 +1133,74 @@ export async function updateStudentLabOrderStatus(orderId, status) {
   const data = await response.json();
   if (!response.ok) throw new Error(data.message || "Failed to update order status");
   return data;
+}
+
+// The student's rubric, points and instructor feedback for an assignment.
+export async function fetchStudentGrading(assignmentId) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) {
+    throw new Error("No active session. Please sign in again.");
+  }
+
+  const response = await fetch(
+    `/api/student/assignments/${encodeURIComponent(assignmentId)}/grading`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.message || "Unable to load grading.");
+  }
+  return payload;
+}
+
+// ---- The Simulation (shared encounter) ----
+
+// returns null when this assignment is not part of a simulation
+export async function fetchStudentEncounter(assignmentId) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) {
+    throw new Error("No active session. Please sign in again.");
+  }
+
+  const response = await fetch(
+    `/api/student/assignments/${encodeURIComponent(assignmentId)}/encounter`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+
+  if (response.status === 404) return null;
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.message || "Unable to load this simulation.");
+  }
+  return payload;
+}
+
+// saves fields into this student's own section of the shared record
+export function saveStudentEncounterData(assignmentId, data) {
+  return authenticatedRequest(
+    `/api/student/assignments/${encodeURIComponent(assignmentId)}/encounter-data`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data }),
+    },
+  );
+}
+
+// finishes this step and opens the next student's assignment/step
+export function completeStudentStep(assignmentId) {
+  return authenticatedRequest(
+    `/api/student/assignments/${encodeURIComponent(assignmentId)}/complete-step`,
+    { method: "POST" },
+  );
+}
+
+// Instructor: assign a simulation. Body: { title, ..., steps: [{ stepKey, studentId }] }
+export function assignInstructorSimulation(classroomId, simulation) {
+  return instructorRequest(`/classrooms/${classroomId}/simulations`, {
+    method: "POST",
+    body: JSON.stringify(simulation),
+  });
 }

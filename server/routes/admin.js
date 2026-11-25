@@ -1438,6 +1438,94 @@ adminRouter.get("/audit-log", async (request, response) => {
   }
 });
 
+
+//
+// Audit Log CSV Export Tracking
+// Records when an administrator initiates an export.
+//
+adminRouter.post("/global-audit-log/export-event", async (request, response) => {
+  try {
+    // Make sure the user is an administrator.
+    const context = await requireAdmin(request, response);
+
+    if (!context) {
+      return;
+    }
+
+    const { supabaseAdmin, actor } = context;
+
+    // Get information about the export.
+    const {
+      search = "",
+      role = "all",
+      action = "all",
+      recordCount
+    } = request.body || {};
+
+    // Validate the information sent from React.
+    const allowedRoles = [
+      "all", "Student", "Instructor", "Admin", "Patient"
+    ];
+
+    const allowedActions = [
+      "all",
+      "note.created",
+      "note.updated",
+      "note.submitted",
+      "note.reviewed",
+      "account.invited",
+      "account.activated",
+      "account.deactivated",
+      "account.access_updated",
+      "account.password_reset_requested",
+      "classroom.created",
+      "student.bulk_invited",
+      "patient.viewed",
+      "audit.export_initiated"
+    ];
+
+    if (
+      typeof search !== "string" ||
+      search.length > 80 ||
+      !allowedRoles.includes(role) ||
+      !allowedActions.includes(action) ||
+      !Number.isSafeInteger(recordCount) ||
+      recordCount < 0 ||
+      recordCount > 50000
+    ) {
+      return response.status(400).json({
+        message: "Invalid audit export information."
+      });
+    }
+
+    // Save the export event to our existing audit table.
+    await writeAuditLog(supabaseAdmin, {
+      actor_id: actor.id,
+      action: "audit.export_initiated",
+      entity_type: "audit_log",
+      details: {
+        format: "CSV",
+        recordCount: recordCount,
+        filterSearch: search || "None",
+        filterRole: role,
+        filterAction: action
+      }
+    });
+
+    return response.status(201).json({
+      message: "Audit export event recorded."
+    });
+
+  } catch (error) {
+    console.error("Unable to record audit export:", error);
+
+    return response.status(500).json({
+      message: "Unable to record audit export."
+    });
+  }
+});
+
+
 //Dereks Global Audit Log
 //Page for Admins to view all activity in the system. This is a global audit log that shows all activity in the system, not just admin activity. This is useful for tracking down issues and seeing what users are doing in the system.
 adminRouter.get("/global-audit-log", async (request, response) => {
@@ -1492,6 +1580,7 @@ adminRouter.get("/global-audit-log", async (request, response) => {
       "classroom.created",
       "student.bulk_invited",
       "patient.viewed",
+      "audit.export_initiated"
     ];
 
     if (

@@ -9,6 +9,8 @@ import StudentLabOrderForm from "../components/StudentLabOrderForm";
 import LabOrderDetailModal from "../components/LabOrderDetailModal";
 import { fetchStudentVitals, createStudentVital, deleteStudentVital } from "../lib/api";
 import { fetchStudentLabOrders, updateStudentLabOrder, updateStudentLabOrderStatus, deleteStudentLabOrder } from "../lib/api";
+import { fetchStudentGrading } from "../lib/api";
+import InstructorFeedback from "../components/InstructorFeedback";
 import {
   fetchStudentCases,
   fetchStudentPharmacyNotes,
@@ -224,11 +226,11 @@ export default function StudentCaseDetailPage({
           ? result
           : result?.cases ?? [];
 
-        const selected = cases.find(
-          (item) =>
-            String(item.id) === String(caseId) ||
-            String(item.assignment_id) === String(caseId)
-        );
+        const selected =
+          cases.find(
+            (item) => String(item.assignment_id) === String(caseId)
+          ) ??
+          cases.find((item) => String(item.id) === String(caseId));
 
         if (!selected) throw new Error("Case not found.");
 
@@ -356,6 +358,23 @@ export default function StudentCaseDetailPage({
       setUpdating(false);
     }
   }
+
+  const [grading, setGrading] = useState(null);
+
+  useEffect(() => {
+    if (!patient?.assignment_id) return;
+    let active = true;
+
+    fetchStudentGrading(patient.assignment_id)
+      .then((result) => {
+        if (active) setGrading(result);
+      })
+      .catch((err) => console.error("Unable to load grading:", err));
+
+    return () => {
+      active = false;
+    };
+  }, [patient?.assignment_id]);
 
   if (loading) {
     return (
@@ -1115,6 +1134,8 @@ export default function StudentCaseDetailPage({
 
           {tab === "Notes" && (
             <>
+              <InstructorFeedback grading={grading} />
+
               {user?.subrole === "Nursing" ? (
                 <NursingNotesPage
                   selectedCaseId={patient.id}

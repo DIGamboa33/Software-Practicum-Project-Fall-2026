@@ -36,6 +36,8 @@ function ReviewDecisionPanel({ assignmentId, status, criteria = [], onReviewed }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  // "grade" = score the rubric and approve, "return" = send back with feedback
+  const [mode, setMode] = useState("grade");
 
   // Only a submitted note can be reviewed
   if (status !== "Pending Review" && !message) return null;
@@ -75,7 +77,7 @@ function ReviewDecisionPanel({ assignmentId, status, criteria = [], onReviewed }
       return;
     }
 
-    const scored = criteria.filter((c) => !isEmpty(c));
+        const scored = decision === "Approved" ? criteria.filter((c) => !isEmpty(c)) : [];
 
     if (decision === "Approved" && scored.length < criteria.length) {
       setTriedApprove(true);
@@ -126,7 +128,45 @@ function ReviewDecisionPanel({ assignmentId, status, criteria = [], onReviewed }
       <p className="section-label">Review decision</p>
       <h2>Feedback for the student</h2>
 
-      {canReview && criteria.length > 0 && (
+            {canReview && (
+        <>
+          <div
+            role="group"
+            aria-label="Review type"
+            style={{ display: "flex", gap: "8px", margin: "16px 0 8px" }}
+          >
+            <button
+              type="button"
+              className={mode === "grade" ? "primary-button" : "secondary-button"}
+              onClick={() => {
+                setMode("grade");
+                setError("");
+              }}
+            >
+              Grade &amp; approve
+            </button>
+            <button
+              type="button"
+              className={mode === "return" ? "primary-button" : "secondary-button"}
+              onClick={() => {
+                setMode("return");
+                setError("");
+                setTriedApprove(false);
+              }}
+            >
+              Return for revision
+            </button>
+          </div>
+
+          <p style={{ margin: "0 0 8px", color: "#64748b", fontSize: "14px" }}>
+            {mode === "grade"
+              ? "Score each rubric criterion. An overall comment is optional."
+              : "Explain what the student should revise. Scores aren't needed."}
+          </p>
+        </>
+      )}
+
+      {canReview && mode === "grade" && criteria.length > 0 && (
         <div style={{ display: "grid", gap: "12px", margin: "16px 0" }}>
           <h3 style={{ margin: 0, fontSize: "16px" }}>Rubric</h3>
 
@@ -200,7 +240,7 @@ function ReviewDecisionPanel({ assignmentId, status, criteria = [], onReviewed }
       {canReview && (
         <div className="review-field block">
           <label htmlFor="review-comments">
-            Comments <span className="review-field__hint">(required when returning)</span>
+                        Comments <span className="review-field__hint">({mode === "return" ? "required" : "optional"})</span>
           </label>
           <textarea
             id="review-comments"
@@ -221,23 +261,15 @@ function ReviewDecisionPanel({ assignmentId, status, criteria = [], onReviewed }
       )}
       {message && <p role="status">{message}</p>}
 
-      {canReview && (
+            {canReview && (
         <div className="form-actions review-decision__actions">
-          <button
-            className="secondary-button"
-            disabled={saving}
-            onClick={() => decide("Returned")}
-            type="button"
-          >
-            Return for revision
-          </button>
           <button
             className="primary-button"
             disabled={saving}
-            onClick={() => decide("Approved")}
+            onClick={() => decide(mode === "grade" ? "Approved" : "Returned")}
             type="button"
           >
-            Approve
+            {mode === "grade" ? "Approve" : "Return for revision"}
           </button>
         </div>
       )}

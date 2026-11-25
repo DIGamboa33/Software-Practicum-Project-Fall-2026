@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { supabase, getSupabaseAdmin } from "../services/supabase.js";
 import { writeAuditLog } from "../services/auditLog.js";
+import { SIMULATION_STEPS, SHARED_KEY_BY_STEP, openStep, stepRequirementProblems } from "../services/simulationSteps.js";
 
 const studentRouter = Router();
 
@@ -1486,6 +1487,181 @@ studentRouter.get("/classes/:classroomId", async (request, response) => {
     );
   }
 
+  // Surface only the cases assigned to this student in this classroom.  The
+  // assignment is the source of truth here: a case can be reused in another
+  // class without appearing in this student's current class workspace.
+  const { data: assignments, error: assignmentsError } = await supabaseAdmin
+    .schema("learning")
+    .from("student_case_assignments")
+    .select(`
+      id,
+      case_id,
+      encounter_status,
+      note_type,
+      due_at,
+      created_at,
+      updated_at,
+      case:cases (
+        id,
+        title,
+        patient_name,
+        patient_age,
+        patient_sex,
+        chief_complaint
+      )
+    `)
+    .eq("classroom_id", classroomId)
+    .eq("student_id", user.id)
+    .order("due_at", { ascending: true, nullsFirst: false });
+
+  if (assignmentsError) {
+    console.error("Unable to load class assignments:", assignmentsError.message);
+    return response.status(500).json({ message: "Unable to load this class." });
+  }
+
+  const assignmentIds = (assignments || []).map((assignment) => assignment.id);
+  const caseIds = [...new Set((assignments || []).map((assignment) => assignment.case_id))];
+  let latestNoteByAssignment = new Map();
+  let latestReviewByNote = new Map();
+  let scoreByReview = new Map();
+  let possiblePointsByCase = new Map();
+
+  if (assignmentIds.length) {
+    const { data: notes, error: notesError } = await supabaseAdmin
+      .schema("learning")
+      .from("notes")
+      .select("id, assignment_id, status, updated_at")
+      .in("assignment_id", assignmentIds)
+      .order("updated_at", { ascending: false });
+
+    if (notesError) {
+      console.error("Unable to load class notes:", notesError.message);
+      return response.status(500).json({ message: "Unable to load this class." });
+    }
+
+    for (const note of notes || []) {
+      if (!latestNoteByAssignment.has(note.assignment_id)) {
+        latestNoteByAssignment.set(note.assignment_id, note);
+      }
+    }
+
+    const latestNotes = [...latestNoteByAssignment.values()];
+    if (latestNotes.length) {
+      const { data: reviews, error: reviewsError } = await supabaseAdmin
+        .schema("learning")
+        .from("note_reviews")
+        .select("id, note_id, decision, comments, created_at")
+        .in("note_id", latestNotes.map((note) => note.id))
+        .order("created_at", { ascending: false });
+
+      if (reviewsError) {
+        console.error("Unable to load class reviews:", reviewsError.message);
+        return response.status(500).json({ message: "Unable to load this class." });
+      }
+
+      for (const review of reviews || []) {
+        if (!latestReviewByNote.has(review.note_id)) {
+          latestReviewByNote.set(review.note_id, review);
+        }
+      }
+
+      const reviewIds = [...latestReviewByNote.values()].map((review) => review.id);
+      if (reviewIds.length) {
+        const { data: scores, error: scoresError } = await supabaseAdmin
+          .schema("learning")
+          .from("review_scores")
+          .select("review_id, points_awarded")
+          .in("review_id", reviewIds);
+
+        if (scoresError) {
+          console.error("Unable to load class scores:", scoresError.message);
+          return response.status(500).json({ message: "Unable to load this class." });
+        }
+
+        for (const score of scores || []) {
+          scoreByReview.set(
+            score.review_id,
+            (scoreByReview.get(score.review_id) || 0) + Number(score.points_awarded || 0),
+          );
+        }
+      }
+    }
+
+    if (caseIds.length) {
+      const { data: criteria, error: criteriaError } = await supabaseAdmin
+        .schema("learning")
+        .from("rubric_criteria")
+        .select("case_id, max_points")
+        .in("case_id", caseIds);
+
+      if (criteriaError) {
+        console.error("Unable to load class rubric criteria:", criteriaError.message);
+        return response.status(500).json({ message: "Unable to load this class." });
+      }
+
+      for (const criterion of criteria || []) {
+        possiblePointsByCase.set(
+          criterion.case_id,
+          (possiblePointsByCase.get(criterion.case_id) || 0) + Number(criterion.max_points || 0),
+        );
+      }
+    }
+  }
+
+  const cases = (assignments || []).map((assignment) => {
+    const note = latestNoteByAssignment.get(assignment.id);
+    const review = note ? latestReviewByNote.get(note.id) : null;
+    const possiblePoints = possiblePointsByCase.get(assignment.case_id) || 0;
+    const earnedPoints = review ? scoreByReview.get(review.id) || 0 : null;
+
+    return {
+      assignmentId: assignment.id,
+      caseId: assignment.case_id,
+      title: assignment.case?.title || "Untitled case",
+      patientName: assignment.case?.patient_name || "Unknown patient",
+      patientAge: assignment.case?.patient_age || null,
+      patientSex: assignment.case?.patient_sex || null,
+      chiefComplaint: assignment.case?.chief_complaint || null,
+      encounterStatus: assignment.encounter_status || "Not started",
+      noteType: assignment.note_type || "soap",
+      dueAt: assignment.due_at,
+      assignedAt: assignment.created_at,
+      updatedAt: assignment.updated_at,
+      noteStatus: note?.status || "Not started",
+      feedback: review
+        ? {
+            decision: review.decision,
+            comments: review.comments,
+            reviewedAt: review.created_at,
+          }
+        : null,
+      grade: review && possiblePoints > 0
+        ? { earnedPoints, possiblePoints }
+        : null,
+    };
+  });
+
+  // Announcements are optional until the classroom-announcements migration is
+  // applied. Keeping the class endpoint usable before that rollout avoids
+  // breaking the student dashboard during a staged deployment.
+  const { data: announcements, error: announcementsError } = await supabaseAdmin
+    .schema("school")
+    .from("classroom_announcements")
+    .select("id, title, body, is_pinned, created_at, updated_at")
+    .eq("classroom_id", classroomId)
+    .order("is_pinned", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(6);
+
+  const announcementsTableIsMissing = ["42P01", "PGRST205"].includes(
+    announcementsError?.code,
+  );
+
+  if (announcementsError && !announcementsTableIsMissing) {
+    console.error("Unable to load classroom announcements:", announcementsError.message);
+    return response.status(500).json({ message: "Unable to load this class." });
+  }
+
   return response.json({
     id: classroomResult.data.id,
     crn: classroomResult.data.crn,
@@ -1504,10 +1680,43 @@ studentRouter.get("/classes/:classroomId", async (request, response) => {
           teammates: mateIds.map((id) => profileNames.get(id)).filter(Boolean),
         }
       : null,
+    cases,
+    announcements: announcementsError ? [] : announcements || [],
   });
 }
 
 );
+
+// assignment ids this student may read: their own, plus earlier steps of the
+// same simulation, it returns null if the assignment isn't theirs
+async function assignmentIdsForReading(learning, assignmentId, userId) {
+  const { data: own, error: ownError } = await learning
+    .from("student_case_assignments")
+    .select("id")
+    .eq("id", assignmentId)
+    .eq("student_id", userId)
+    .maybeSingle();
+  if (ownError) throw ownError;
+  if (!own) return null;
+
+  const { data: step, error: stepError } = await learning
+    .from("simulation_steps")
+    .select("encounter_id, step_order")
+    .eq("assignment_id", assignmentId)
+    .maybeSingle();
+  if (stepError) throw stepError;
+  if (!step) return [own.id];
+
+  const { data: steps, error: stepsError } = await learning
+    .from("simulation_steps")
+    .select("assignment_id")
+    .eq("encounter_id", step.encounter_id)
+    .lte("step_order", step.step_order)
+    .not("assignment_id", "is", null);
+  if (stepsError) throw stepsError;
+
+  return steps.map((row) => row.assignment_id);
+}
 
 // GET vitals for a specific assignment
 studentRouter.get("/assignments/:assignmentId/vitals", async (request, response) => {
@@ -1525,13 +1734,17 @@ studentRouter.get("/assignments/:assignmentId/vitals", async (request, response)
   try {
    
     const { assignmentId } = request.params;
-    const supabaseAdmin = getSupabaseAdmin();
+    const learning = getSupabaseAdmin().schema("learning");
 
-    const { data, error } = await supabaseAdmin
-      .schema("learning")
+    const ids = await assignmentIdsForReading(learning, assignmentId, user.id);
+    if (!ids) {
+      return response.status(403).json({ message: "You do not have access to this case." });
+    }
+
+    const { data, error } = await learning
       .from("vitals")
       .select("*")
-      .eq("assignment_id", assignmentId)
+      .in("assignment_id", ids)
       .order("recorded_at", { ascending: false });
 
     if (error) throw error;
@@ -1668,13 +1881,17 @@ studentRouter.get("/assignments/:assignmentId/lab-orders", async (request, respo
 
   try {
     const { assignmentId } = request.params;
-    const supabaseAdmin = getSupabaseAdmin();
+    const learning = getSupabaseAdmin().schema("learning");
 
-    const { data, error } = await supabaseAdmin
-      .schema("learning")
+    const ids = await assignmentIdsForReading(learning, assignmentId, user.id);
+    if (!ids) {
+      return response.status(403).json({ message: "You do not have access to this case." });
+    }
+
+    const { data, error } = await learning
       .from("lab_orders")
       .select("*")
-      .eq("assignment_id", assignmentId)
+      .in("assignment_id", ids)
       .order("ordered_at", { ascending: false });
 
     if (error) throw error;
@@ -1936,4 +2153,357 @@ studentRouter.patch("/lab-orders/:orderId/status", async (request, response) => 
 
   return response.json(data);
 });
+
+// The student's rubric, points and feedback for one assignment.
+studentRouter.get("/assignments/:assignmentId/grading", async (request, response) => {
+  const authorization = request.headers.authorization;
+
+  if (!authorization?.startsWith("Bearer ")) {
+    return response.status(401).json({ message: "Authentication required." });
+  }
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser(authorization.slice(7));
+
+  if (authError || !user) {
+    return response.status(401).json({ message: "Invalid or expired session." });
+  }
+
+  try {
+    const learning = getSupabaseAdmin().schema("learning");
+
+    // The assignment must belong to this student.
+    const { data: assignment, error: assignmentError } = await learning
+      .from("student_case_assignments")
+      .select("id, case_id, due_at")
+      .eq("id", request.params.assignmentId)
+      .eq("student_id", user.id)
+      .maybeSingle();
+
+    if (assignmentError) throw assignmentError;
+
+    if (!assignment) {
+      return response.status(403).json({
+        message: "You do not have access to this case.",
+      });
+    }
+
+    const [rubricResult, notesResult] = await Promise.all([
+      learning
+        .from("rubric_criteria")
+        .select("id, description, max_points, position")
+        .eq("case_id", assignment.case_id)
+        .order("position"),
+      learning.from("notes")
+              .select("id, status, updated_at")
+              .eq("assignment_id", assignment.id)
+              .order("updated_at", { ascending: false }),
+    ]);
+
+    if (rubricResult.error) throw rubricResult.error;
+    if (notesResult.error) throw notesResult.error;
+
+    const noteIds = (notesResult.data || []).map((note) => note.id);
+
+    // Latest instructor review across this assignment's notes.
+        // Every instructor review for this assignment's notes, newest first.
+    let review = null;
+    let attempts = 0;
+
+    if (noteIds.length > 0) {
+      const { data, error } = await learning
+        .from("note_reviews")
+        .select("id, decision, comments, created_at")
+        .in("note_id", noteIds)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      review = data?.[0] || null;
+      attempts = data?.length || 0;
+    }
+
+    // Points and per-criterion feedback saved with that review.
+    const scoresByCriterion = new Map();
+
+    if (review) {
+      const { data, error } = await learning
+        .from("review_scores")
+        .select("criterion_id, points_awarded, feedback")
+        .eq("review_id", review.id);
+
+      if (error) throw error;
+
+      for (const row of data || []) {
+        scoresByCriterion.set(row.criterion_id, row);
+      }
+    }
+
+    // The full rubric, with points filled in where the instructor scored.
+    const rubric = (rubricResult.data || []).map((criterion) => {
+      const score = scoresByCriterion.get(criterion.id);
+
+      return {
+        id: criterion.id,
+        description: criterion.description,
+        maxPoints: Number(criterion.max_points),
+        points: score ? Number(score.points_awarded) : null,
+        feedback: score?.feedback || null,
+      };
+    });
+
+    return response.json({
+      review: review
+        ? {
+            decision: review.decision,
+            comments: review.comments,
+            created_at: review.created_at,
+          }
+        : null,
+      rubric,
+      dueAt: assignment.due_at,
+      attempts,
+      noteStatus: notesResult.data?.[0]?.status || null,
+      totalPoints: rubric.reduce((sum, item) => sum + (item.points ?? 0), 0),
+      totalMax: rubric.reduce((sum, item) => sum + item.maxPoints, 0),
+      scoredCount: rubric.filter((item) => item.points !== null).length,
+    });
+  } catch (error) {
+    console.error("Unable to load grading:", error.message || error);
+
+    return response.status(500).json({ message: "Unable to load grading." });
+  }
+});
+
+// ---- Simulation (shared encounter) ----
+async function loadSimulationStep(request, response) {
+  const token = (request.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!token) {
+    response.status(401).json({ message: "Missing access token." });
+    return null;
+  }
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData?.user) {
+    response.status(401).json({ message: "Your session has expired." });
+    return null;
+  }
+
+  const admin = getSupabaseAdmin();
+  const learning = admin.schema("learning");
+  const { data: step, error } = await learning
+    .from("simulation_steps")
+    .select("id, encounter_id, step_key, step_order, student_id, status, assignment_id")
+    .eq("assignment_id", request.params.assignmentId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!step) {
+    response.status(404).json({ message: "This assignment is not part of a simulation." });
+    return null;
+  }
+  if (step.student_id !== authData.user.id) {
+    response.status(403).json({ message: "You do not have access to this case." });
+    return null;
+  }
+  return { admin, learning, step };
+}
+
+// The whole encounter as this student should see it:
+studentRouter.get("/assignments/:assignmentId/encounter", async (request, response) => {
+  try {
+    const ctx = await loadSimulationStep(request, response);
+    if (!ctx) return;
+    const { admin, learning, step } = ctx;
+
+    const [encounterResult, stepsResult] = await Promise.all([
+      learning
+        .from("simulation_encounters")
+        .select("id, case_id, status, shared_data, referral_subrole_id")
+        .eq("id", step.encounter_id)
+        .single(),
+      learning
+        .from("simulation_steps")
+        .select("step_key, step_order, student_id, assignment_id, status, completed_at")
+        .eq("encounter_id", step.encounter_id)
+        .order("step_order"),
+    ]);
+    if (encounterResult.error) throw encounterResult.error;
+    if (stepsResult.error) throw stepsResult.error;
+
+    const studentIds = [...new Set(stepsResult.data.map((s) => s.student_id))];
+    const { data: people, error: peopleError } = await admin
+      .from("profiles")
+      .select("id, first_name, last_name")
+      .in("id", studentIds);
+    if (peopleError) throw peopleError;
+    const nameById = new Map(
+      (people || []).map((p) => [p.id, `${p.first_name || ""} ${p.last_name || ""}`.trim()]),
+    );
+    const labelByKey = new Map(SIMULATION_STEPS.map((d) => [d.key, d.label]));
+    const encounter = encounterResult.data;
+
+    return response.json({
+      encounterId: encounter.id,
+      caseId: encounter.case_id,
+      status: encounter.status,
+      sharedData: encounter.shared_data || {},
+      referralSubroleId: encounter.referral_subrole_id,
+      current: {
+        stepKey: step.step_key,
+        stepOrder: step.step_order,
+        status: step.status,
+        canEdit: step.status === "open" && encounter.status === "active",
+      },
+      steps: stepsResult.data.map((s) => ({
+        order: s.step_order,
+        key: s.step_key,
+        label: labelByKey.get(s.step_key) || s.step_key,
+        status: s.status,
+        studentName: nameById.get(s.student_id) || "Unknown student",
+        isMine: s.step_order === step.step_order,
+      })),
+      // Lets the vitals/notes/labs routes read everything in this encounter
+      assignmentIds: stepsResult.data.map((s) => s.assignment_id).filter(Boolean),
+    });
+  } catch (error) {
+    console.error("Unable to load simulation encounter:", error);
+    return response.status(500).json({ message: "Unable to load this simulation." });
+  }
+});
+
+// Save this step's data into its own key of shared_data:
+studentRouter.patch("/assignments/:assignmentId/encounter-data", async (request, response) => {
+  try {
+    const ctx = await loadSimulationStep(request, response);
+    if (!ctx) return;
+    const { learning, step } = ctx;
+
+    const data = request.body?.data;
+    if (!data || typeof data !== "object" || Array.isArray(data) || JSON.stringify(data).length > 20000) {
+      return response.status(400).json({ message: "Send the fields to save as an object." });
+    }
+    if (step.status !== "open") {
+      return response.status(409).json({ message: "This step is not open." });
+    }
+
+    const { data: encounter, error: encounterError } = await learning
+      .from("simulation_encounters")
+      .select("id, status, shared_data")
+      .eq("id", step.encounter_id)
+      .single();
+    if (encounterError) throw encounterError;
+    if (encounter.status !== "active") {
+      return response.status(409).json({ message: "This simulation is already finished." });
+    }
+
+    const key = SHARED_KEY_BY_STEP[step.step_key];
+    const current = encounter.shared_data || {};
+    const merged = { ...current, [key]: { ...(current[key] || {}), ...data } };
+
+    const { error: updateError } = await learning
+      .from("simulation_encounters")
+      .update({ shared_data: merged, updated_at: new Date().toISOString() })
+      .eq("id", encounter.id);
+    if (updateError) throw updateError;
+
+    return response.json({ sharedData: merged, message: "Saved." });
+  } catch (error) {
+    console.error("Unable to save encounter data:", error);
+    return response.status(500).json({ message: "Unable to save your changes." });
+  }
+});
+
+// Finish this step and open the next one for the next student:
+studentRouter.post("/assignments/:assignmentId/complete-step", async (request, response) => {
+  try {
+    const ctx = await loadSimulationStep(request, response);
+    if (!ctx) return;
+    const { learning, step } = ctx;
+
+    if (step.status !== "open") {
+      return response.status(409).json({ message: "This step is not open." });
+    }
+
+    const { data: encounter, error: encounterError } = await learning
+      .from("simulation_encounters")
+      .select("id, status, shared_data")
+      .eq("id", step.encounter_id)
+      .single();
+    if (encounterError) throw encounterError;
+    if (encounter.status !== "active") {
+      return response.status(409).json({ message: "This simulation is already finished." });
+    }
+
+    const problems = await stepRequirementProblems(learning, {
+      step,
+      assignmentId: step.assignment_id,
+      sharedData: encounter.shared_data || {},
+    });
+    if (problems.length) {
+      return response.status(400).json({ message: problems[0], problems });
+    }
+
+    // Mark done only if still open:
+    const { data: claimed, error: claimError } = await learning
+      .from("simulation_steps")
+      .update({ status: "done", completed_at: new Date().toISOString() })
+      .eq("id", step.id)
+      .eq("status", "open")
+      .select("id")
+      .maybeSingle();
+    if (claimError) throw claimError;
+    if (!claimed) {
+      return response.status(409).json({ message: "This step was already completed." });
+    }
+
+    const { data: nextStep, error: nextError } = await learning
+      .from("simulation_steps")
+      .select("id, student_id")
+      .eq("encounter_id", step.encounter_id)
+      .eq("step_order", step.step_order + 1)
+      .maybeSingle();
+    if (nextError) throw nextError;
+
+    if (!nextStep) {
+      await learning
+        .from("simulation_encounters")
+        .update({ status: "completed", updated_at: new Date().toISOString() })
+        .eq("id", step.encounter_id);
+      return response.json({ message: "Simulation complete.", completed: true });
+    }
+
+    // The next student gets a normal assignment copied from this one:
+    try {
+      const { data: current, error: currentError } = await learning
+        .from("student_case_assignments")
+        .select("case_id, classroom_id, due_at, note_type")
+        .eq("id", step.assignment_id)
+        .single();
+      if (currentError) throw currentError;
+
+      await openStep(learning, {
+        step: nextStep,
+        caseId: current.case_id,
+        classroomId: current.classroom_id,
+        dueAt: current.due_at,
+        noteType: current.note_type,
+        encounterStatus: "Checked in",
+      });
+    } catch (openError) {
+      // Undo "done" so the student isn't stuck with nobody next in line:
+      await learning
+        .from("simulation_steps")
+        .update({ status: "open", completed_at: null })
+        .eq("id", step.id);
+      throw openError;
+    }
+
+    return response.json({ message: "Step completed. The next role has been notified.", completed: false });
+  } catch (error) {
+    console.error("Unable to complete simulation step:", error);
+    return response.status(500).json({ message: "Unable to complete this step." });
+  }
+});
+
 export default studentRouter;
