@@ -69,6 +69,13 @@ const NOTE_TYPES = {
     "pharmacy_phone",
     "pharmacy_telehealth",
   ],
+
+  Nursing: [
+    "nursing_soap",
+    "nursing_care_plan",
+    "nursing_phone",
+    "nursing_telehealth",
+  ],
 };
 
 studentRouter.get("/cases", async (request, response) => {
@@ -163,6 +170,7 @@ studentRouter.get("/notes/:assignmentId", async (request, response) => {
 
   const DISCIPLINE_SCOPES = {
     pharmacy: "Pharmacy",
+    nursing: "Nursing",
   };
 
   const discipline = DISCIPLINE_SCOPES[scope];

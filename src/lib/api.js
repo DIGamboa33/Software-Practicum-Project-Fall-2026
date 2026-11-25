@@ -559,6 +559,44 @@ export async function fetchStudentPharmacyNotes(assignmentId) {
   return payload;
 }
 
+// Fetch all Nursing notes for a student's assigned case.
+export async function fetchStudentNursingNotes(assignmentId) {
+  const accessToken = sessionStorage.getItem(
+    "careflow-access-token"
+  );
+
+  if (!accessToken) {
+    throw new Error("No active session. Please sign in again.");
+  }
+
+  if (!assignmentId) {
+    throw new Error("Assignment ID is required.");
+  }
+
+  const response = await fetch(
+    `/api/student/notes/${encodeURIComponent(assignmentId)}?scope=nursing`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      payload.message || "Unable to load Nursing notes."
+    );
+  }
+
+  if (!Array.isArray(payload)) {
+    throw new Error("Unexpected Nursing notes response.");
+  }
+
+  return payload;
+}
+
 export async function updateStudentCaseStatus(
   assignmentId,
   encounterStatus,

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import PharmacyNotesPage from "./PharmacyNotesPage";
+import NursingNotesPage from "./NursingNotesPage";
 import VitalEntryForm from "../components/VitalEntryForm";
 import VitalsDetailModal from "../components/VitalsDetailModal";
 import StudentLabOrderForm from "../components/StudentLabOrderForm";
@@ -1110,16 +1111,28 @@ export default function StudentCaseDetailPage({
                 />
               )}
             </div>
-          )}
+          )} 
 
           {tab === "Notes" && (
-            <PharmacyNotesPage
-              selectedCaseId={patient.id}
-              user={user}
-              onNavigate={onNavigate}
-              embedded
-            />
+            <>
+              {user?.subrole === "Nursing" ? (
+                <NursingNotesPage
+                  selectedCaseId={patient.id}
+                  user={user}
+                  onNavigate={onNavigate}
+                  embedded
+                />
+              ) : (
+                <PharmacyNotesPage
+                  selectedCaseId={patient.id}
+                  user={user}
+                  onNavigate={onNavigate}
+                  embedded
+                />
+              )}
+            </>
           )}
+
 
           {tab === "Appointments" && (
             <Card title="Appointments">
