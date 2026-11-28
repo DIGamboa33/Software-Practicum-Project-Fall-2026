@@ -1,3 +1,4 @@
+import { SIMULATION_STEPS, openStep } from "../services/simulationSteps.js";
 import { Router } from "express";
 import { getSupabaseAdmin, supabase } from "../services/supabase.js";
 import { writeAuditLog } from "../services/auditLog.js";
@@ -1379,6 +1380,224 @@ instructorRouter.post("/classrooms/:classroomId/assignments", async (request, re
     return response.status(500).json({ message: "Unable to assign this case." });
   }
 });
+
+  // ---- Create a case and assign it as a simulation (one student per step) ----
+  instructorRouter.post("/classrooms/:classroomId/simulations", async (request, response) => {
+    try {
+      const context = await requireInstructor(request, response);
+      if (!context) return;
+      const { supabaseAdmin: admin, profile } = context;
+
+      const access = await verifyClassroomAccess(admin, profile, request.params.classroomId);
+      if (!access) {
+        return response.status(404).json({ message: "Classroom not found." });
+      }
+
+      const body = request.body || {};
+      const input = body.patientCase || {};
+      const expectations = body.expectations || {};
+
+      const title = cleanText(input.title, 120);
+      const patientName = cleanText(input.patientName, 120);
+      const noteType = String(body.noteType || "soap");
+
+      if (!title || !patientName) {
+        return response.status(400).json({ message: "Enter a case title and a patient name." });
+      }
+      if (!ASSIGNABLE_NOTE_TYPES.includes(noteType)) {
+        return response.status(400).json({ message: "That note type is not available yet." });
+      }
+
+      // One student per simulation step
+      const stepInputs = Array.isArray(body.steps) ? body.steps : [];
+      const plan = SIMULATION_STEPS.map((def) => ({
+        def,
+        studentId: stepInputs.find((s) => s?.stepKey === def.key)?.studentId,
+      }));
+      if (plan.some((p) => !p.studentId)) {
+        return response.status(400).json({ message: "Pick a student for every step." });
+      }
+      const studentIds = [...new Set(plan.map((p) => p.studentId))];
+
+      let patientAge = null;
+      if (input.patientAge !== "" && input.patientAge != null) {
+        patientAge = Number(input.patientAge);
+        if (!Number.isInteger(patientAge) || patientAge < 0 || patientAge > 120) {
+          return response.status(400).json({ message: "Age must be a whole number from 0 to 120." });
+        }
+      }
+
+      let dateOfBirth = null;
+      if (input.dateOfBirth) {
+        const dob = String(input.dateOfBirth).trim();
+        if (
+          !/^\d{4}-\d{2}-\d{2}$/.test(dob) ||
+          Number.isNaN(Date.parse(`${dob}T00:00:00Z`)) ||
+          dob > new Date().toISOString().slice(0, 10)
+        ) {
+          return response.status(400).json({ message: "Enter a valid date of birth." });
+        }
+        dateOfBirth = dob;
+        if (patientAge === null) patientAge = ageFromDob(dob);
+      }
+
+      const criteria = cleanCriteria(expectations.rubricCriteria);
+      if (criteria.some((item) => !Number.isFinite(item.points) || item.points < 0 || item.points > 1000)) {
+        return response.status(400).json({ message: "Each rubric criterion needs points from 0 to 1000." });
+      }
+
+      let dueAt = null;
+      if (body.dueAt) {
+        const parsed = new Date(body.dueAt);
+        if (Number.isNaN(parsed.getTime())) {
+          return response.status(400).json({ message: "Enter a valid due date." });
+        }
+        dueAt = parsed.toISOString();
+      }
+
+      // Every chosen student must be actively enrolled in THIS class.
+      const { data: enrollments, error: enrollmentError } = await admin
+        .schema("school")
+        .from("classroom_enrollments")
+        .select("student_id")
+        .eq("classroom_id", access.classroom.id)
+        .eq("status", "active")
+        .in("student_id", studentIds);
+      if (enrollmentError) throw enrollmentError;
+
+      const enrolledIds = new Set((enrollments || []).map((row) => row.student_id));
+      if (!studentIds.every((id) => enrolledIds.has(id))) {
+        return response.status(400).json({
+          message: "Some selected students are not enrolled in this classroom.",
+        });
+      }
+
+      // Each student's role must match the step they were given.
+      const { data: studentProfiles, error: profilesError } = await admin
+        .from("profiles")
+        .select("id, sub_role_id")
+        .in("id", studentIds);
+      if (profilesError) throw profilesError;
+      const subroleById = new Map((studentProfiles || []).map((p) => [p.id, p.sub_role_id]));
+      const wrongRole = plan.find(
+        (p) => !p.def.allowedSubroleIds.includes(subroleById.get(p.studentId)),
+      );
+      if (wrongRole) {
+        return response.status(400).json({
+          message: `"${wrongRole.def.label}" needs a student with that role.`,
+        });
+      }
+
+      const learning = admin.schema("learning");
+
+      // 1. The case
+      const { data: createdCase, error: caseError } = await learning
+        .from("cases")
+        .insert({
+          title,
+          patient_name: patientName,
+          patient_age: patientAge,
+          date_of_birth: dateOfBirth,
+          patient_sex: cleanText(input.patientSex, 40) || null,
+          chief_complaint: cleanText(input.chiefComplaint, 500) || null,
+          history: cleanText(input.history, 2000) || null,
+          medications: cleanList(input.medications),
+          allergies: cleanList(input.allergies),
+          results: cleanText(input.results, 1000) || null,
+          starting_encounter_status: "Scheduled",
+          created_by: profile.id,
+        })
+        .select("id")
+        .single();
+      if (caseError) throw caseError;
+
+      // Deleting the case also removes its encounter, steps, expectations and rubric (cascade).
+      async function undoCase() {
+        await learning.from("cases").delete().eq("id", createdCase.id);
+      }
+
+      let encounterId;
+      try {
+        // 2. Instructor-only answer key
+        const expectedDiagnoses = cleanList(expectations.expectedDiagnoses);
+        const instructorNotes = cleanText(expectations.instructorNotes, 2000) || null;
+        if (expectedDiagnoses.length || instructorNotes) {
+          const { error: expectationsError } = await learning
+            .from("case_expectations")
+            .insert({
+              case_id: createdCase.id,
+              expected_diagnoses: expectedDiagnoses,
+              instructor_notes: instructorNotes,
+            });
+          if (expectationsError) throw expectationsError;
+        }
+
+        // 3. Rubric criteria with points
+        if (criteria.length) {
+          const { error: criteriaError } = await learning
+            .from("rubric_criteria")
+            .insert(
+              criteria.map((item, index) => ({
+                case_id: createdCase.id,
+                position: index,
+                description: item.description,
+                max_points: item.points,
+              })),
+            );
+          if (criteriaError) throw criteriaError;
+        }
+
+        // 4. Encounter + the full plan; only step 1 becomes a real assignment
+        const { data: encounter, error: encounterError } = await learning
+          .from("simulation_encounters")
+          .insert({
+            case_id: createdCase.id,
+            classroom_id: access.classroom.id,
+            created_by: profile.id,
+            referral_subrole_id: subroleById.get(plan.find((p) => p.def.key === "provider_visit").studentId),
+          })
+          .select("id")
+          .single();
+        if (encounterError) throw encounterError;
+        encounterId = encounter.id;
+
+        const { data: stepRows, error: stepsError } = await learning
+          .from("simulation_steps")
+          .insert(
+            plan.map((p) => ({
+              encounter_id: encounter.id,
+              step_key: p.def.key,
+              step_order: p.def.order,
+              subrole_id: subroleById.get(p.studentId),
+              student_id: p.studentId,
+            })),
+          )
+          .select("id, student_id, step_order")
+          .order("step_order");
+        if (stepsError) throw stepsError;
+
+        await openStep(learning, {
+          step: stepRows[0],
+          caseId: createdCase.id,
+          classroomId: access.classroom.id,
+          dueAt,
+          noteType,
+        });
+      } catch (stepError) {
+        await undoCase();
+        throw stepError;
+      }
+
+      return response.status(201).json({
+        caseId: createdCase.id,
+        encounterId,
+        message: "Simulation assigned.",
+      });
+    } catch (error) {
+      console.error("Unable to assign simulation:", error.message || error);
+      return response.status(500).json({ message: "Unable to assign this simulation." });
+    }
+  });
 
 // ---- List the cases assigned in a classroom ----
 instructorRouter.get("/classrooms/:classroomId/assignments", async (request, response) => {

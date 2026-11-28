@@ -1116,6 +1116,57 @@ export async function fetchStudentGrading(assignmentId) {
   return payload;
 }
 
+// ---- The Simulation (shared encounter) ----
+
+// returns null when this assignment is not part of a simulation
+export async function fetchStudentEncounter(assignmentId) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) {
+    throw new Error("No active session. Please sign in again.");
+  }
+
+  const response = await fetch(
+    `/api/student/assignments/${encodeURIComponent(assignmentId)}/encounter`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+
+  if (response.status === 404) return null;
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.message || "Unable to load this simulation.");
+  }
+  return payload;
+}
+
+// saves fields into this student's own section of the shared record
+export function saveStudentEncounterData(assignmentId, data) {
+  return authenticatedRequest(
+    `/api/student/assignments/${encodeURIComponent(assignmentId)}/encounter-data`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data }),
+    },
+  );
+}
+
+// finishes this step and opens the next student's assignment/step
+export function completeStudentStep(assignmentId) {
+  return authenticatedRequest(
+    `/api/student/assignments/${encodeURIComponent(assignmentId)}/complete-step`,
+    { method: "POST" },
+  );
+}
+
+// Instructor: assign a simulation. Body: { title, ..., steps: [{ stepKey, studentId }] }
+export function assignInstructorSimulation(classroomId, simulation) {
+  return instructorRequest(`/classrooms/${classroomId}/simulations`, {
+    method: "POST",
+    body: JSON.stringify(simulation),
+  });
+}
+
 export async function fetchStudentNoteAttachments(noteId) {
   const accessToken = sessionStorage.getItem("careflow-access-token");
   if (!accessToken) {
