@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import ReviewDecisionPanel from "../components/ReviewDecisionPanel";
 import Icon from "../components/Icon";
+import { fetchInstructorSubmissionAttachments } from "../lib/api";
 
 const STATUS_OPTIONS = [
   "All",
@@ -212,7 +213,7 @@ function NoteDetails({ note }) {
 
   const rawContent =
     note.content &&
-    typeof note.content === "object"
+      typeof note.content === "object"
       ? note.content
       : {};
 
@@ -227,8 +228,8 @@ function NoteDetails({ note }) {
   // inside content.content.
   const mainContent =
     rawContent.content &&
-    typeof rawContent.content === "object" &&
-    !Array.isArray(rawContent.content)
+      typeof rawContent.content === "object" &&
+      !Array.isArray(rawContent.content)
       ? rawContent.content
       : rawContent;
 
@@ -244,11 +245,11 @@ function NoteDetails({ note }) {
 
   const contentSections =
     mainContent &&
-    typeof mainContent === "object" &&
-    !Array.isArray(mainContent)
+      typeof mainContent === "object" &&
+      !Array.isArray(mainContent)
       ? Object.entries(mainContent).filter(
-          ([key]) => !excludedFields.includes(key)
-        )
+        ([key]) => !excludedFields.includes(key)
+      )
       : [];
 
   // These are saved separately from the main
@@ -386,6 +387,155 @@ function NoteDetails({ note }) {
   );
 }
 
+function NoteAttachments({ attachedVitals = [], attachedLabOrders = [] }) {
+  return (
+    <section
+      aria-label="Attached vitals and lab orders"
+      style={{
+        marginTop: "20px",
+        padding: "20px",
+        border: "1px solid #e2e8f0",
+        borderRadius: "12px",
+        background: "#fff",
+      }}
+    >
+      <h3
+        style={{
+          margin: "0 0 14px",
+          color: "#0f172a",
+          fontSize: "16px",
+          fontWeight: 650,
+        }}
+      >
+        Attached Vitals &amp; Lab Orders
+      </h3>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: "16px",
+        }}
+      >
+        <div
+          style={{
+            padding: "14px 16px",
+            background: "#f8fafc",
+            border: "1px solid #e2e8f0",
+            borderRadius: "8px",
+          }}
+        >
+          <strong
+            style={{
+              display: "block",
+              marginBottom: "8px",
+              fontSize: "13px",
+              color: "#475569",
+            }}
+          >
+            Attached Vital Entry
+          </strong>
+
+          {attachedVitals.length === 0 ? (
+            <span style={{ color: "#94a3b8", fontSize: "14px" }}>
+              None attached
+            </span>
+          ) : (
+            attachedVitals.map((vital) => (
+              <div
+                key={vital.id}
+                style={{ fontSize: "13px", color: "#334155", lineHeight: 1.6 }}
+              >
+                <div>
+                  <strong>Recorded:</strong>{" "}
+                  {formatDate(vital.recorded_at || vital.created_at)}
+                </div>
+                <div>
+                  <strong>BP:</strong>{" "}
+                  {vital.systolic != null && vital.diastolic != null
+                    ? `${vital.systolic}/${vital.diastolic} mmHg`
+                    : "Not recorded"}{" "}
+                  · <strong>HR:</strong>{" "}
+                  {vital.heart_rate != null ? `${vital.heart_rate} bpm` : "—"} ·{" "}
+                  <strong>SpO2:</strong>{" "}
+                  {vital.spo2 != null ? `${vital.spo2}%` : "—"}
+                </div>
+                <div>
+                  <strong>Temp:</strong>{" "}
+                  {vital.temperature != null ? `${vital.temperature}°F` : "—"}{" "}
+                  · <strong>RR:</strong>{" "}
+                  {vital.respiratory_rate != null
+                    ? `${vital.respiratory_rate}/min`
+                    : "—"}{" "}
+                  · <strong>Glucose:</strong>{" "}
+                  {vital.blood_glucose_mg_dl != null
+                    ? `${vital.blood_glucose_mg_dl} mg/dL`
+                    : "—"}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div
+          style={{
+            padding: "14px 16px",
+            background: "#f8fafc",
+            border: "1px solid #e2e8f0",
+            borderRadius: "8px",
+          }}
+        >
+          <strong
+            style={{
+              display: "block",
+              marginBottom: "8px",
+              fontSize: "13px",
+              color: "#475569",
+            }}
+          >
+            Attached Lab Orders ({attachedLabOrders.length})
+          </strong>
+
+          {attachedLabOrders.length === 0 ? (
+            <span style={{ color: "#94a3b8", fontSize: "14px" }}>
+              None attached
+            </span>
+          ) : (
+            <ul
+              style={{
+                margin: 0,
+                paddingLeft: "18px",
+                color: "#334155",
+                fontSize: "13px",
+              }}
+            >
+              {attachedLabOrders.map((order) => (
+                <li key={order.id} style={{ marginBottom: "6px" }}>
+                  <strong>{order.test_name}</strong>
+                  {order.test_code ? ` (${order.test_code})` : ""} —{" "}
+                  {[
+                    order.category,
+                    order.priority,
+                    order.specimen_type,
+                    order.status,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  {order.clinical_indication ? (
+                    <div style={{ color: "#64748b", fontSize: "12px" }}>
+                      Indication: {order.clinical_indication}
+                    </div>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function InstructorReviewPage() {
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -402,7 +552,12 @@ function InstructorReviewPage() {
     useState(false);
   const [detailsError, setDetailsError] = useState("");
 
-    const dialogRef = useRef(null);
+  const dialogRef = useRef(null);
+
+  const [submissionAttachments, setSubmissionAttachments] = useState({
+    attachedVitals: [],
+    attachedLabOrders: [],
+  });
 
   // Open or close the popup whenever a submission is selected
   useEffect(() => {
@@ -417,6 +572,7 @@ function InstructorReviewPage() {
     setSelectedAssignmentId(null);
     setDetails(null);
     setDetailsError("");
+    setSubmissionAttachments({ attachedVitals: [], attachedLabOrders: [] });
   }
 
   async function loadSubmissions() {
@@ -474,567 +630,590 @@ function InstructorReviewPage() {
     };
   }, []);
 
-  async function refreshAfterReview() {
-    await loadSubmissions();
-
-    if (!details?.assignmentId) return;
-
+  async function loadSubmissionAttachments(assignmentId) {
     try {
-      const result = await instructorRequest(
-        `/submissions/${details.assignmentId}`
-      );
+      const attachmentResult =
+        await fetchInstructorSubmissionAttachments(assignmentId);
+      setSubmissionAttachments({
+        attachedVitals: attachmentResult.attachedVitals || [],
+        attachedLabOrders: attachmentResult.attachedLabOrders || [],
+      });
+    } catch {
+      setSubmissionAttachments({ attachedVitals: [], attachedLabOrders: [] });
+    }
+  }
 
-      setDetails(result);
-      setDetailsError("");
-    } catch (refreshError) {
-      setDetailsError(
-        refreshError.message ||
+    async function refreshAfterReview() {
+      await loadSubmissions();
+
+      if (!details?.assignmentId) return;
+
+      try {
+        const [result] = await Promise.all([
+          instructorRequest(`/submissions/${details.assignmentId}`),
+          loadSubmissionAttachments(details.assignmentId),
+        ]);
+
+        setDetails(result);
+        setDetailsError("");
+      } catch (refreshError) {
+        setDetailsError(
+          refreshError.message ||
           "Unable to refresh this submission."
-      );
+        );
+      }
     }
-  }
+  
 
-  async function openSubmission(assignmentId) {
-    
-    setSelectedAssignmentId(assignmentId);
-    setDetails(null);
-    setDetailsError("");
-    setDetailsLoading(true);
+    async function openSubmission(assignmentId) {
 
-    try {
-      const result = await instructorRequest(
-        `/submissions/${assignmentId}`
-      );
+      setSelectedAssignmentId(assignmentId);
+      setDetails(null);
+      setDetailsError("");
+      setSubmissionAttachments({ attachedVitals: [], attachedLabOrders: [] });
+      setDetailsLoading(true);
 
-      setDetails(result);
-    } catch (loadError) {
-      setDetailsError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Unable to open submission."
-      );
-    } finally {
-      setDetailsLoading(false);
+      try {
+        const [result] = await Promise.all([
+          instructorRequest(`/submissions/${assignmentId}`),
+          loadSubmissionAttachments(assignmentId),
+        ]);
+
+        setDetails(result);
+      } catch (loadError) {
+        setDetailsError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Unable to open submission."
+        );
+      } finally {
+        setDetailsLoading(false);
+      }
     }
-  }
 
-  const pendingCount = submissions.filter(
-    (item) => item.status === "Pending Review"
-  ).length;
+    const pendingCount = submissions.filter(
+      (item) => item.status === "Pending Review"
+    ).length;
 
-  const approvedCount = submissions.filter(
-    (item) => item.status === "Approved"
-  ).length;
+    const approvedCount = submissions.filter(
+      (item) => item.status === "Approved"
+    ).length;
 
-  const returnedCount = submissions.filter(
-    (item) => item.status === "Returned"
-  ).length;
+    const returnedCount = submissions.filter(
+      (item) => item.status === "Returned"
+    ).length;
 
-  const visibleSubmissions = submissions.filter(
-    (item) => {
-      if (
-        filter !== "All" &&
-        item.status !== filter
-      ) {
-        return false;
+    const visibleSubmissions = submissions.filter(
+      (item) => {
+        if (
+          filter !== "All" &&
+          item.status !== filter
+        ) {
+          return false;
+        }
+
+        const searchableText = [
+          formatStudent(item.student),
+          item.patientCase?.title,
+          item.patientCase?.patient_name,
+          item.noteTitle,
+          item.noteType,
+          item.status,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return searchableText.includes(
+          search.toLowerCase().trim()
+        );
+      }
+    );
+
+    const styles = {
+      toolbar: {
+        display: "flex",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "12px",
+        marginBottom: "24px",
+      },
+
+      input: {
+        flex: "1 1 240px",
+        minWidth: 0,
+        padding: "12px 14px",
+        border: "1px solid #dbe2ea",
+        borderRadius: "10px",
+        background: "#fff",
+        color: "#334155",
+        font: "inherit",
+        fontSize: "14px",
+      },
+
+      select: {
+        minWidth: "170px",
+        padding: "12px 14px",
+        border: "1px solid #dbe2ea",
+        borderRadius: "10px",
+        background: "#fff",
+        color: "#334155",
+        font: "inherit",
+        fontSize: "14px",
+      },
+
+      list: {
+        display: "grid",
+        gap: "14px",
+      },
+
+      card: {
+        padding: "20px",
+        border: "1px solid #e2e8f0",
+        borderRadius: "12px",
+        background: "#fff",
+      },
+
+      cardHeader: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        flexWrap: "wrap",
+        gap: "16px",
+      },
+
+      cardFooter: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "16px",
+        marginTop: "18px",
+        paddingTop: "14px",
+        borderTop: "1px solid #e2e8f0",
+      },
+
+      metadata: {
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "16px",
+        color: "#64748b",
+        fontSize: "13px",
+      },
+
+      button: {
+        padding: "9px 15px",
+        border: "1px solid #cbd5e1",
+        borderRadius: "9px",
+        background: "#fff",
+        color: "#334155",
+        font: "inherit",
+        fontSize: "13px",
+        fontWeight: 600,
+        cursor: "pointer",
+      },
+
+      status: {
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "6px 11px",
+        borderRadius: "999px",
+        fontSize: "12px",
+        fontWeight: 650,
+        whiteSpace: "nowrap",
+      },
+    };
+
+    function statusStyle(status) {
+      if (status === "Pending Review") {
+        return {
+          background: "#eef2ff",
+          color: "#4338ca",
+        };
       }
 
-      const searchableText = [
-        formatStudent(item.student),
-        item.patientCase?.title,
-        item.patientCase?.patient_name,
-        item.noteTitle,
-        item.noteType,
-        item.status,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+      if (status === "Approved") {
+        return {
+          background: "#dcfce7",
+          color: "#166534",
+        };
+      }
 
-      return searchableText.includes(
-        search.toLowerCase().trim()
-      );
-    }
-  );
+      if (status === "Returned") {
+        return {
+          background: "#fef3c7",
+          color: "#92400e",
+        };
+      }
 
-  const styles = {
-    toolbar: {
-      display: "flex",
-      alignItems: "center",
-      flexWrap: "wrap",
-      gap: "12px",
-      marginBottom: "24px",
-    },
-
-    input: {
-      flex: "1 1 240px",
-      minWidth: 0,
-      padding: "12px 14px",
-      border: "1px solid #dbe2ea",
-      borderRadius: "10px",
-      background: "#fff",
-      color: "#334155",
-      font: "inherit",
-      fontSize: "14px",
-    },
-
-    select: {
-      minWidth: "170px",
-      padding: "12px 14px",
-      border: "1px solid #dbe2ea",
-      borderRadius: "10px",
-      background: "#fff",
-      color: "#334155",
-      font: "inherit",
-      fontSize: "14px",
-    },
-
-    list: {
-      display: "grid",
-      gap: "14px",
-    },
-
-    card: {
-      padding: "20px",
-      border: "1px solid #e2e8f0",
-      borderRadius: "12px",
-      background: "#fff",
-    },
-
-    cardHeader: {
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "flex-start",
-      flexWrap: "wrap",
-      gap: "16px",
-    },
-
-    cardFooter: {
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      flexWrap: "wrap",
-      gap: "16px",
-      marginTop: "18px",
-      paddingTop: "14px",
-      borderTop: "1px solid #e2e8f0",
-    },
-
-    metadata: {
-      display: "flex",
-      flexWrap: "wrap",
-      gap: "16px",
-      color: "#64748b",
-      fontSize: "13px",
-    },
-
-    button: {
-      padding: "9px 15px",
-      border: "1px solid #cbd5e1",
-      borderRadius: "9px",
-      background: "#fff",
-      color: "#334155",
-      font: "inherit",
-      fontSize: "13px",
-      fontWeight: 600,
-      cursor: "pointer",
-    },
-
-    status: {
-      display: "inline-flex",
-      alignItems: "center",
-      padding: "6px 11px",
-      borderRadius: "999px",
-      fontSize: "12px",
-      fontWeight: 650,
-      whiteSpace: "nowrap",
-    },
-  };
-
-  function statusStyle(status) {
-    if (status === "Pending Review") {
       return {
-        background: "#eef2ff",
-        color: "#4338ca",
+        background: "#f1f5f9",
+        color: "#475569",
       };
     }
 
-    if (status === "Approved") {
-      return {
-        background: "#dcfce7",
-        color: "#166534",
-      };
-    }
-
-    if (status === "Returned") {
-      return {
-        background: "#fef3c7",
-        color: "#92400e",
-      };
-    }
-
-    return {
-      background: "#f1f5f9",
-      color: "#475569",
-    };
-  }
-
-  return (
-    <div className="dashboard-page content-page instructor-workspace">
-      <section className="page-heading">
-        <div>
-          <p className="section-label">
-            Instructor workspace · documentation
-          </p>
-
-          <h1>Review &amp; Cosign</h1>
-
-          <p>
-            View submitted student documentation
-            awaiting instructor review.
-          </p>
-        </div>
-      </section>
-
-      {/* Overview metrics */}
-      <section className="instructor-overview-metrics">
-        {[
-          {
-            label: "Pending Review",
-            value: pendingCount,
-            tone: "indigo",
-            icon: "bell",
-          },
-          {
-            label: "Approved",
-            value: approvedCount,
-            tone: "teal",
-            icon: "chart",
-          },
-          {
-            label: "Returned",
-            value: returnedCount,
-            tone: "amber",
-            icon: "arrow",
-          },
-        ].map((metric) => (
-          <article
-            key={metric.label}
-            className={`panel instructor-overview-metric instructor-overview-metric--${metric.tone}`}
-          >
-            <div className="patient-metric-heading"><span>{metric.label}</span><Icon name={metric.icon} size={17} /></div>
-
-            <strong>
-              {loading || error ? "—" : metric.value}
-            </strong>
-
-            <small>Student documentation</small>
-          </article>
-        ))}
-      </section>
-
-      {/* Submission queue */}
-      <section className="panel review-queue-panel">
-        <div
-          className="panel__header"
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            flexWrap: "wrap",
-            gap: "16px",
-            marginBottom: "24px",
-          }}
-        >
+    return (
+      <div className="dashboard-page content-page instructor-workspace">
+        <section className="page-heading">
           <div>
             <p className="section-label">
-              Documentation queue
+              Instructor workspace · documentation
             </p>
 
-            <h2>Student Submissions</h2>
+            <h1>Review &amp; Cosign</h1>
 
-            <p
-              style={{
-                marginTop: "6px",
-                color: "#64748b",
-                fontSize: "14px",
-              }}
-            >
-              Review submitted student notes,
-              including SOAP, SBAR, and MTM documentation.
+            <p>
+              View submitted student documentation
+              awaiting instructor review.
             </p>
           </div>
+        </section>
 
-          <button
-            type="button"
-            style={styles.button}
-            onClick={loadSubmissions}
-            disabled={loading}
+        {/* Overview metrics */}
+        <section className="instructor-overview-metrics">
+          {[
+            {
+              label: "Pending Review",
+              value: pendingCount,
+              tone: "indigo",
+              icon: "bell",
+            },
+            {
+              label: "Approved",
+              value: approvedCount,
+              tone: "teal",
+              icon: "chart",
+            },
+            {
+              label: "Returned",
+              value: returnedCount,
+              tone: "amber",
+              icon: "arrow",
+            },
+          ].map((metric) => (
+            <article
+              key={metric.label}
+              className={`panel instructor-overview-metric instructor-overview-metric--${metric.tone}`}
+            >
+              <div className="patient-metric-heading"><span>{metric.label}</span><Icon name={metric.icon} size={17} /></div>
+
+              <strong>
+                {loading || error ? "—" : metric.value}
+              </strong>
+
+              <small>Student documentation</small>
+            </article>
+          ))}
+        </section>
+
+        {/* Submission queue */}
+        <section className="panel review-queue-panel">
+          <div
+            className="panel__header"
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              flexWrap: "wrap",
+              gap: "16px",
+              marginBottom: "24px",
+            }}
           >
-            Refresh
-          </button>
-        </div>
+            <div>
+              <p className="section-label">
+                Documentation queue
+              </p>
 
-        {/* Search and filters */}
-        <div style={styles.toolbar}>
-          <input
-            type="search"
-            value={search}
-            onChange={(event) =>
-              setSearch(event.target.value)
-            }
-            placeholder="Search student, patient, or note..."
-            aria-label="Search submissions"
-            style={styles.input}
-          />
+              <h2>Student Submissions</h2>
 
-          <select
-            value={filter}
-            onChange={(event) =>
-              setFilter(event.target.value)
-            }
-            aria-label="Filter by status"
-            style={styles.select}
-          >
-            {STATUS_OPTIONS.map((status) => (
-              <option
-                key={status}
-                value={status}
+              <p
+                style={{
+                  marginTop: "6px",
+                  color: "#64748b",
+                  fontSize: "14px",
+                }}
               >
-                {status}
-              </option>
-            ))}
-          </select>
-        </div>
+                Review submitted student notes,
+                including SOAP, SBAR, and MTM documentation.
+              </p>
+            </div>
 
-        {error && (
-          <p className="directory-error">
-            {error}
-          </p>
-        )}
+            <button
+              type="button"
+              style={styles.button}
+              onClick={loadSubmissions}
+              disabled={loading}
+            >
+              Refresh
+            </button>
+          </div>
 
-        {loading && (
-          <p className="directory-loading">
-            Loading student submissions…
-          </p>
-        )}
+          {/* Search and filters */}
+          <div style={styles.toolbar}>
+            <input
+              type="search"
+              value={search}
+              onChange={(event) =>
+                setSearch(event.target.value)
+              }
+              placeholder="Search student, patient, or note..."
+              aria-label="Search submissions"
+              style={styles.input}
+            />
 
-        {!loading &&
-          !error &&
-          visibleSubmissions.length === 0 && (
-            <p className="directory-loading">
-              No submissions match your current filters.
+            <select
+              value={filter}
+              onChange={(event) =>
+                setFilter(event.target.value)
+              }
+              aria-label="Filter by status"
+              style={styles.select}
+            >
+              {STATUS_OPTIONS.map((status) => (
+                <option
+                  key={status}
+                  value={status}
+                >
+                  {status}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {error && (
+            <p className="directory-error">
+              {error}
             </p>
           )}
 
-        {!loading &&
-          !error &&
-          visibleSubmissions.length > 0 && (
-            <div style={styles.list}>
-              {visibleSubmissions.map(
-                (submission) => (
-                  <article
-                    key={submission.id}
-                    style={styles.card}
-                  >
-                    <div style={styles.cardHeader}>
-                      <div>
-                        <h3
-                          style={{
-                            margin: "0 0 6px",
-                            fontSize: "17px",
-                            fontWeight: 650,
-                            color: "#0f172a",
-                          }}
-                        >
-                          {formatStudent(
-                            submission.student
-                          )}
-                        </h3>
-
-                        <p
-                          style={{
-                            margin: "0 0 5px",
-                            color: "#334155",
-                          }}
-                        >
-                          {submission.patientCase?.title ||
-                            "Untitled case"}
-                        </p>
-
-                        <small
-                          style={{
-                            color: "#64748b",
-                          }}
-                        >
-                          Patient:{" "}
-                          {submission.patientCase
-                            ?.patient_name ||
-                            "Unknown patient"}
-                        </small>
-                      </div>
-
-                      <span
-                        style={{
-                          ...styles.status,
-                          ...statusStyle(
-                            submission.status
-                          ),
-                        }}
-                      >
-                        {submission.status}
-                      </span>
-                    </div>
-
-                    <div style={styles.cardFooter}>
-                      <div style={styles.metadata}>
-                        <span>
-                          {getTemplateName({
-                            note_type:
-                              submission.noteType,
-                          })}
-                        </span>
-
-                        <span>
-                          {formatDate(
-                            submission.updatedAt
-                          )}
-                        </span>
-                      </div>
-
-                      <button
-                        type="button"
-                        style={styles.button}
-                        onClick={() =>
-                          openSubmission(
-                            submission.assignmentId
-                          )
-                        }
-                      >
-                        {selectedAssignmentId ===
-                        submission.assignmentId
-                          ? "Close Details"
-                          : "View Submission"}
-                      </button>
-                    </div>
-                  </article>
-                )
-              )}
-            </div>
+          {loading && (
+            <p className="directory-loading">
+              Loading student submissions…
+            </p>
           )}
-      </section>
 
-            {/* Submission details popup */}
-      <dialog
-        ref={dialogRef}
-        className="assign-modal"
-        onClose={closeSubmission}
-        onClick={(event) => {
-          // clicking the dark backdrop closes the popup
-          if (event.target === event.currentTarget) closeSubmission();
-        }}
-        style={{
-          width: "min(960px, 94vw)", 
-          overflow: "visible",
-          outline: "none",
-        }}
-      >
-             <button
-              type="button"
-              aria-label="Close"
-              onClick={closeSubmission}
-              style={{
-                position: "absolute",
-                top: "-10px",
-                right: "-10px",
-                zIndex: 1,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "26px",
-                height: "26px",
-                padding: 0,
-                border: "1px solid #e2e8f0",
-                borderRadius: "999px",
-                background: "#ffffff",
-                color: "#64748b",
-                cursor: "pointer",
-              }}
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-                <path
-                  d="M1 1l8 8M9 1L1 9"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  fill="none"
-                />
-              </svg>
-            </button>
-        {selectedAssignmentId !== null && (
-          <div 
+          {!loading &&
+            !error &&
+            visibleSubmissions.length === 0 && (
+              <p className="directory-loading">
+                No submissions match your current filters.
+              </p>
+            )}
+
+          {!loading &&
+            !error &&
+            visibleSubmissions.length > 0 && (
+              <div style={styles.list}>
+                {visibleSubmissions.map(
+                  (submission) => (
+                    <article
+                      key={submission.id}
+                      style={styles.card}
+                    >
+                      <div style={styles.cardHeader}>
+                        <div>
+                          <h3
+                            style={{
+                              margin: "0 0 6px",
+                              fontSize: "17px",
+                              fontWeight: 650,
+                              color: "#0f172a",
+                            }}
+                          >
+                            {formatStudent(
+                              submission.student
+                            )}
+                          </h3>
+
+                          <p
+                            style={{
+                              margin: "0 0 5px",
+                              color: "#334155",
+                            }}
+                          >
+                            {submission.patientCase?.title ||
+                              "Untitled case"}
+                          </p>
+
+                          <small
+                            style={{
+                              color: "#64748b",
+                            }}
+                          >
+                            Patient:{" "}
+                            {submission.patientCase
+                              ?.patient_name ||
+                              "Unknown patient"}
+                          </small>
+                        </div>
+
+                        <span
+                          style={{
+                            ...styles.status,
+                            ...statusStyle(
+                              submission.status
+                            ),
+                          }}
+                        >
+                          {submission.status}
+                        </span>
+                      </div>
+
+                      <div style={styles.cardFooter}>
+                        <div style={styles.metadata}>
+                          <span>
+                            {getTemplateName({
+                              note_type:
+                                submission.noteType,
+                            })}
+                          </span>
+
+                          <span>
+                            {formatDate(
+                              submission.updatedAt
+                            )}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          style={styles.button}
+                          onClick={() =>
+                            openSubmission(
+                              submission.assignmentId
+                            )
+                          }
+                        >
+                          {selectedAssignmentId ===
+                            submission.assignmentId
+                            ? "Close Details"
+                            : "View Submission"}
+                        </button>
+                      </div>
+                    </article>
+                  )
+                )}
+              </div>
+            )}
+        </section>
+
+        {/* Submission details popup */}
+        <dialog
+          ref={dialogRef}
+          className="assign-modal"
+          onClose={closeSubmission}
+          onClick={(event) => {
+            // clicking the dark backdrop closes the popup
+            if (event.target === event.currentTarget) closeSubmission();
+          }}
+          style={{
+            width: "min(960px, 94vw)",
+            overflow: "visible",
+            outline: "none",
+          }}
+        >
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={closeSubmission}
             style={{
+              position: "absolute",
+              top: "-10px",
+              right: "-10px",
+              zIndex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "26px",
+              height: "26px",
+              padding: 0,
+              border: "1px solid #e2e8f0",
+              borderRadius: "999px",
+              background: "#ffffff",
+              color: "#64748b",
+              cursor: "pointer",
+            }}
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+              <path
+                d="M1 1l8 8M9 1L1 9"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                fill="none"
+              />
+            </svg>
+          </button>
+          {selectedAssignmentId !== null && (
+            <div
+              style={{
                 margin: "14px 0",
                 padding: "14px 32px",
                 maxHeight: "calc(90vh - 28px)",
                 overflowY: "auto",
                 borderRadius: "inherit",
               }}>
-            <header style={{ marginBottom: "16px" }}>
-              <p className="section-label">Student documentation</p>
-              <h2>Submission Details</h2>
-            </header>
+              <header style={{ marginBottom: "16px" }}>
+                <p className="section-label">Student documentation</p>
+                <h2>Submission Details</h2>
+              </header>
 
-            {detailsLoading && (
-              <p className="directory-loading">Loading documentation…</p>
-            )}
+              {detailsLoading && (
+                <p className="directory-loading">Loading documentation…</p>
+              )}
 
-            {detailsError && <p className="directory-error">{detailsError}</p>}
+              {detailsError && <p className="directory-error">{detailsError}</p>}
 
-            {!detailsLoading && details && (
-              <>
-                <div className="scope-rule">
-                  <strong>Student</strong>
-                  <span>{formatStudent(details.student)}</span>
-                </div>
+              {!detailsLoading && details && (
+                <>
+                  <div className="scope-rule">
+                    <strong>Student</strong>
+                    <span>{formatStudent(details.student)}</span>
+                  </div>
 
-                <div className="scope-rule">
-                  <strong>Patient</strong>
-                  <span>{details.patientCase?.patient_name || "Unknown patient"}</span>
-                </div>
+                  <div className="scope-rule">
+                    <strong>Patient</strong>
+                    <span>{details.patientCase?.patient_name || "Unknown patient"}</span>
+                  </div>
 
-                <div className="scope-rule">
-                  <strong>Case</strong>
-                  <span>{details.patientCase?.title || "Untitled case"}</span>
-                </div>
+                  <div className="scope-rule">
+                    <strong>Case</strong>
+                    <span>{details.patientCase?.title || "Untitled case"}</span>
+                  </div>
 
-                <div className="scope-rule">
-                  <strong>Status</strong>
-                  <span>{details.note?.status || "Unknown"}</span>
-                </div>
+                  <div className="scope-rule">
+                    <strong>Status</strong>
+                    <span>{details.note?.status || "Unknown"}</span>
+                  </div>
 
-                <NoteDetails note={details.note} />
+                  <NoteDetails note={details.note} />
 
-                <div style={{ marginTop: "28px" }}>
-                  <ReviewDecisionPanel
-                    assignmentId={details.assignmentId}
-                    status={details.note?.status}
-                    criteria={details.rubric || []}
-                    onReviewed={refreshAfterReview}
+                  <NoteAttachments
+                    attachedVitals={submissionAttachments.attachedVitals}
+                    attachedLabOrders={submissionAttachments.attachedLabOrders}
                   />
-                </div>
-              </>
-            )}
-            <div style={{ marginTop: "16px", textAlign: "right" }}>
-              <button type="button" style={styles.button} onClick={closeSubmission}>
-                Close
-              </button>
-            </div>
-          </div>
-        )}
-      </dialog>
-    </div>
-  );
-}
 
-export default InstructorReviewPage;
+                  <div style={{ marginTop: "28px" }}>
+                    <ReviewDecisionPanel
+                      assignmentId={details.assignmentId}
+                      status={details.note?.status}
+                      criteria={details.rubric || []}
+                      onReviewed={refreshAfterReview}
+                    />
+                  </div>
+                </>
+              )}
+              <div style={{ marginTop: "16px", textAlign: "right" }}>
+                <button type="button" style={styles.button} onClick={closeSubmission}>
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
+        </dialog>
+      </div>
+    );
+  }
+  
+
+  export default InstructorReviewPage;

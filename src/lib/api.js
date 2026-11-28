@@ -1162,3 +1162,9 @@ export async function saveStudentNoteAttachments(noteId, { vitalId, labOrderIds 
   }
   return payload;
 }
+
+export async function fetchInstructorSubmissionAttachments(assignmentId) {
+  return instructorRequest(
+    `/submissions/${encodeURIComponent(assignmentId)}/attachments`,
+  );
+}
