@@ -359,6 +359,7 @@ export default function PharmacyNotesPage({
   user,
   selectedCaseId,
   embedded = false,
+  onSelectNote,
 }) {
   const [params] = useSearchParams();
   const caseId =
@@ -486,6 +487,10 @@ export default function PharmacyNotesPage({
     };
   }, [patient?.assignment_id]);
 
+  useEffect(() => {
+    onSelectNote?.(draft?.fromDatabase ? draft : null);
+  }, [draft, onSelectNote]);
+
   async function persist(note, close = false) {
     if (
       !patient?.assignment_id ||
@@ -540,6 +545,11 @@ export default function PharmacyNotesPage({
       ]);
 
       setDraft(close ? null : updated);
+      setMessage("Draft saved to database.");
+
+      const nextDraft = close ? null : updated;
+      setDraft(nextDraft);
+      onSelectNote?.(nextDraft?.fromDatabase ? nextDraft : null);
       setMessage("Draft saved to database.");
 
       return true;
@@ -606,6 +616,7 @@ export default function PharmacyNotesPage({
       );
 
       setDraft(updated);
+      onSelectNote?.(updated?.fromDatabase ? updated : null);
       setShowInstructorPicker(false);
       setMessage("Note submitted for instructor review.");
     } catch (err) {

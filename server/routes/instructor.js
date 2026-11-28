@@ -1974,4 +1974,95 @@ instructorRouter.delete("/drafts/:id", async (request, response) => {
   }
 });
 
+instructorRouter.get(
+  "/submissions/:assignmentId/attachments",
+  async (request, response) => {
+    try {
+      const context = await requireInstructor(request, response);
+      if (!context) return;
+
+      const { supabaseAdmin: admin, profile } = context;
+
+      const assignment = await getReviewAssignment(
+        admin,
+        profile,
+        request.params.assignmentId,
+      );
+
+      if (!assignment) {
+        return response.status(404).json({
+          message: "Submission not found or access denied.",
+        });
+      }
+
+      const learning = admin.schema("learning");
+
+      const { data: note, error: noteError } = await learning
+        .from("notes")
+        .select("id, status, updated_at")
+        .eq("assignment_id", assignment.id)
+        .in("status", ["Pending Review", "Approved", "Returned"])
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (noteError) throw noteError;
+
+      if (!note) {
+        return response.json({
+          noteId: null,
+          attachedVitals: [],
+          attachedLabOrders: [],
+        });
+      }
+
+      const [noteVitalsRes, noteLabOrdersRes] = await Promise.all([
+        learning
+          .from("note_vitals")
+          .select("vital_id")
+          .eq("note_id", note.id),
+        learning
+          .from("note_lab_orders")
+          .select("lab_order_id")
+          .eq("note_id", note.id),
+      ]);
+
+      if (noteVitalsRes.error) throw noteVitalsRes.error;
+      if (noteLabOrdersRes.error) throw noteLabOrdersRes.error;
+
+      const vitalIds = (noteVitalsRes.data || []).map((row) => row.vital_id);
+      const labOrderIds = (noteLabOrdersRes.data || []).map(
+        (row) => row.lab_order_id,
+      );
+
+      const [attachedVitalsRes, attachedLabOrdersRes] = await Promise.all([
+        vitalIds.length
+          ? learning.from("vitals").select("*").in("id", vitalIds)
+          : Promise.resolve({ data: [], error: null }),
+        labOrderIds.length
+          ? learning
+              .from("lab_orders")
+              .select("*")
+              .in("id", labOrderIds)
+              .order("id")
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (attachedVitalsRes.error) throw attachedVitalsRes.error;
+      if (attachedLabOrdersRes.error) throw attachedLabOrdersRes.error;
+
+      return response.json({
+        noteId: note.id,
+        attachedVitals: attachedVitalsRes.data || [],
+        attachedLabOrders: attachedLabOrdersRes.data || [],
+      });
+    } catch (error) {
+      console.error("Unable to load submission attachments:", error);
+      return response.status(500).json({
+        message: "Unable to load submission attachments.",
+      });
+    }
+  },
+);
+
 export default instructorRouter;

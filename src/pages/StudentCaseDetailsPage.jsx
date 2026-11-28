@@ -8,6 +8,7 @@ import StudentLabOrderForm from "../components/StudentLabOrderForm";
 import LabOrderDetailModal from "../components/LabOrderDetailModal";
 import { fetchStudentVitals, createStudentVital, deleteStudentVital } from "../lib/api";
 import { fetchStudentLabOrders, updateStudentLabOrder, updateStudentLabOrderStatus, deleteStudentLabOrder } from "../lib/api";
+import { fetchStudentNoteAttachments, saveStudentNoteAttachments } from "../lib/api";
 import { fetchStudentGrading } from "../lib/api";
 import InstructorFeedback from "../components/InstructorFeedback";
 import {
@@ -185,7 +186,7 @@ export default function StudentCaseDetailPage({
   mode = "assessment",
 }) {
   const [params] = useSearchParams();
-
+  
   const caseId =
     params.get("id") ??
     params.get("caseId") ??
@@ -202,6 +203,61 @@ export default function StudentCaseDetailPage({
   const [selectedVitalModal, setSelectedVitalModal] = useState(null);
   const [ordersList, setOrdersList] = useState([])
   const [selectedLabOrderModal, setSelectedLabOrderModal] = useState(null);
+
+  const [attachedVitalId, setAttachedVitalId] = useState(null);
+  const [attachedLabOrderIds, setAttachedLabOrderIds] = useState([]);
+  const [isVitalPickerOpen, setIsVitalPickerOpen] = useState(false);
+  const [isLabOrderPickerOpen, setIsLabOrderPickerOpen] = useState(false);
+  const [pickerError, setPickerError] = useState("");
+
+  const [activeNote, setActiveNote] = useState(null);
+  const [attachmentStatus, setAttachmentStatus] = useState("");
+  const [savingAttachments, setSavingAttachments] = useState(false);
+
+  const activeNoteId = activeNote?.id ?? null;
+  const isNoteLocked = ["Pending Review", "Approved"].includes(activeNote?.status);
+
+  useEffect(() => {
+    setActiveNote(null);
+    setAttachedVitalId(null);
+    setAttachedLabOrderIds([]);
+    setPickerError("");
+    setAttachmentStatus("");
+  }, [patient?.assignment_id, tab]);
+
+  useEffect(() => {
+    if (!activeNoteId) {
+      setAttachedVitalId(null);
+      setAttachedLabOrderIds([]);
+      setAttachmentStatus("");
+      return undefined;
+    }
+
+    let active = true;
+
+    async function loadNoteAttachments() {
+      try {
+        setAttachmentStatus("");
+        const data = await fetchStudentNoteAttachments(activeNoteId);
+        if (!active) return;
+        setAttachedVitalId(data.vitalId ?? null);
+        setAttachedLabOrderIds(
+          Array.isArray(data.labOrderIds) ? data.labOrderIds : [],
+        );
+      } catch (err) {
+        if (active) {
+          console.error("Failed to load note attachments:", err);
+          setPickerError(err.message || "Unable to load note attachments.");
+        }
+      }
+    }
+
+    loadNoteAttachments();
+
+    return () => {
+      active = false;
+    };
+  }, [activeNoteId, activeNote?.status]);
 
   useEffect(() => {
     let active = true;
@@ -459,6 +515,89 @@ export default function StudentCaseDetailPage({
     await deleteStudentLabOrder(orderId);
     setOrdersList((prev) => prev.filter((o) => o.id !== orderId));
   };
+
+  const attachedVital =
+    vitalsList.find((v) => String(v.id) === String(attachedVitalId)) ?? null;
+
+  const attachedLabOrders = ordersList.filter((order) =>
+    attachedLabOrderIds.some((id) => String(id) === String(order.id)),
+  );
+
+  function normalizeTestName(name) {
+    return String(name ?? "").trim().toLowerCase();
+  }
+
+async function persistAttachments(nextVitalId, nextLabOrderIds) {
+    //console.log("[DEBUG] persistAttachments entry:", { activeNoteId, noteStatus: activeNote?.status, isNoteLocked, savingAttachments, nextVitalId, nextLabOrderIds });
+    setAttachmentStatus("");
+
+    if (!activeNoteId) {
+      setPickerError("Open or select a note first to attach vitals or lab orders.");
+      return;
+    }
+
+    if (isNoteLocked) {
+      setPickerError(
+        "This note is locked while Pending Review or Approved. Attachments cannot be changed.",
+      );
+      return;
+    }
+
+    try {
+      setSavingAttachments(true);
+      setPickerError("");
+      const saved = await saveStudentNoteAttachments(activeNoteId, {
+        vitalId: nextVitalId,
+        labOrderIds: nextLabOrderIds,
+      });
+      setAttachedVitalId(saved.vitalId ?? null);
+      setAttachedLabOrderIds(
+        Array.isArray(saved.labOrderIds) ? saved.labOrderIds : [],
+      );
+      setAttachmentStatus("Attachments saved to note.");
+    } catch (err) {
+      setPickerError(err.message || "Unable to save note attachments.");
+    } finally {
+      setSavingAttachments(false);
+    }
+  }
+
+  async function handleSelectVital(vitalId) {
+    const nextVitalId =
+      String(attachedVitalId) === String(vitalId) ? null : vitalId;
+    setIsVitalPickerOpen(false);
+    await persistAttachments(nextVitalId, attachedLabOrderIds);
+  }
+
+  async function handleToggleLabOrder(order) {
+    const exists = attachedLabOrderIds.some(
+      (id) => String(id) === String(order.id),
+    );
+
+    let nextLabOrderIds;
+    if (exists) {
+      nextLabOrderIds = attachedLabOrderIds.filter(
+        (id) => String(id) !== String(order.id),
+      );
+    } else {
+      const candidateKey = normalizeTestName(order.test_name);
+      const duplicate = attachedLabOrders.some(
+        (selected) =>
+          String(selected.id) !== String(order.id) &&
+          normalizeTestName(selected.test_name) === candidateKey,
+      );
+
+      if (candidateKey && duplicate) {
+        setPickerError(
+          `"${order.test_name.trim()}" is already selected for this submission. Remove the existing one first to avoid duplicate test names.`,
+        );
+        return;
+      }
+      nextLabOrderIds = [...attachedLabOrderIds, order.id];
+    }
+
+    await persistAttachments(attachedVitalId, nextLabOrderIds);
+  }
 
 
   const allergies = patient.allergies;
@@ -1133,15 +1272,452 @@ export default function StudentCaseDetailPage({
 
           {tab === "Notes" && (
             <>
-            <InstructorFeedback grading={grading} />
-            <PharmacyNotesPage
-              selectedCaseId={patient.id}
-              user={user}
-              onNavigate={onNavigate}
-              embedded
-            />
+              <InstructorFeedback grading={grading} />
+              <PharmacyNotesPage
+                selectedCaseId={patient.id}
+                user={user}
+                onNavigate={onNavigate}
+                onSelectNote={setActiveNote}
+                embedded
+              />
+
+              {activeNoteId && (
+              <Card
+                title="Submission Attachments (Vitals & Lab Orders)"
+                fullWidth
+                action={
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={isNoteLocked || savingAttachments}
+                      onClick={() => {
+                        setPickerError("");
+                        setAttachmentStatus("");
+                        setIsVitalPickerOpen(true);
+                      }}
+                    >
+                      {attachedVital
+                        ? "Change Vital Entry"
+                        : "Select Vital Entry (Optional)"}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={isNoteLocked || savingAttachments}
+                      onClick={() => {
+                        setPickerError("");
+                        setAttachmentStatus("");
+                        setIsLabOrderPickerOpen(true);
+                      }}
+                    >
+                      Select Lab Orders (Optional)
+                    </button>
+                  </div>
+                }
+              >
+            
+                {!activeNoteId && (
+                  <p className="case-help-text" style={{ marginTop: 0 }}>
+                    Create or select a note above to save vitals or lab orders to that note.
+                  </p>
+                )}
+
+                {isNoteLocked && (
+                  <p className="case-help-text" style={{ marginTop: 0 }}>
+                    This note is {activeNote?.status}. Attachments are locked unless returned for revision.
+                  </p>
+                )}
+
+                {pickerError && (
+                  <p role="alert" style={{ color: "#d9534f", fontSize: 13, marginTop: 0 }}>
+                    {pickerError}
+                  </p>
+                )}
+
+                {attachmentStatus && (
+                  <p role="status" style={{ color: "#2e7665", fontSize: 13, marginTop: 0 }}>
+                    {attachmentStatus}
+                  </p>
+                )}
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                    gap: 16,
+                  }}
+                >
+                  <div
+                    style={{
+                      border: "1px solid #e5e9f0",
+                      borderRadius: 10,
+                      padding: 14,
+                      background: "#f9fbff",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: 8,
+                      }}
+                    >
+                      <strong style={{ fontSize: 13 }}>Attached Vital Entry (Max 1)</strong>
+                      {attachedVital && (
+                        <button
+                          type="button"
+                          className="text-button text-button--danger"
+                          disabled={isNoteLocked || savingAttachments || !activeNoteId}
+                          onClick={() => persistAttachments(null, attachedLabOrderIds)}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    {attachedVital ? (
+                      <p className="case-help-text" style={{ margin: 0 }}>
+                        {formatDate(attachedVital.recorded_at ?? attachedVital.created_at)} —{" "}
+                        {attachedVital.systolic && attachedVital.diastolic
+                          ? `BP ${attachedVital.systolic}/${attachedVital.diastolic} mmHg`
+                          : "BP N/A"}
+                        {attachedVital.heart_rate ? `, HR ${attachedVital.heart_rate} bpm` : ""}
+                        {attachedVital.spo2 ? `, SpO2 ${attachedVital.spo2}%` : ""}
+                      </p>
+                    ) : (
+                      <p className="case-help-text" style={{ margin: 0 }}>
+                        No vital entry selected.
+                      </p>
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      border: "1px solid #e5e9f0",
+                      borderRadius: 10,
+                      padding: 14,
+                      background: "#f9fbff",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: 8,
+                      }}
+                    >
+                      <strong style={{ fontSize: 13 }}>
+                        Attached Lab Orders ({attachedLabOrders.length})
+                      </strong>
+                      {attachedLabOrders.length > 0 && (
+                        <button
+                          type="button"
+                          className="text-button text-button--danger"
+                          disabled={isNoteLocked || savingAttachments || !activeNoteId}
+                          onClick={() => persistAttachments(attachedVitalId, [])}
+                        >
+                          Clear all
+                        </button>
+                      )}
+                    </div>
+                    {attachedLabOrders.length > 0 ? (
+                      <ul style={{ margin: 0, paddingLeft: 18 }}>
+                        {attachedLabOrders.map((order) => (
+                          <li
+                            key={order.id}
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: 8,
+                              marginBottom: 6,
+                              fontSize: 13,
+                            }}
+                          >
+                            <span>
+                              <strong>{order.test_name}</strong>{" "}
+                              <span className="case-help-text">
+                                ({order.category || "General"} · {order.priority || "Routine"})
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              className="text-button text-button--danger"
+                              disabled={isNoteLocked || savingAttachments || !activeNoteId}
+                              onClick={() =>
+                                persistAttachments(
+                                  attachedVitalId,
+                                  attachedLabOrderIds.filter(
+                                    (id) => String(id) !== String(order.id),
+                                  ),
+                                )
+                              }
+                            >
+                              Remove
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="case-help-text" style={{ margin: 0 }}>
+                        No lab orders selected.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </Card>
+              )}
+
+              {isVitalPickerOpen && (
+                <div
+                  style={{
+                    position: "fixed",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    overflowX: "hidden",
+                    boxSizing: "border-box",
+                    background: "rgba(0, 0, 0, 0.5)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: 16,
+                    zIndex: 1000,
+                  }}
+                >
+                  <div
+                    className="panel data-panel"
+                    style={{
+                      width: "100%",
+                      maxWidth: 560,
+                      padding: 24,
+                      background: "#fff",
+                      borderRadius: 12,
+                      maxHeight: "85vh",
+                      overflowY: "auto",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: 12,
+                      }}
+                    >
+                      <h2 style={{ margin: 0, fontSize: 18 }}>Select Vital Entry (Choose 1)</h2>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => setIsVitalPickerOpen(false)}
+                        style={{ padding: "4px 8px" }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <p className="case-help-text" style={{ marginBottom: 12 }}>
+                      Condensed case vitals list. Selecting a vital replaces any previously chosen vital.
+                    </p>
+
+                    {vitalsList.length === 0 ? (
+                      <p className="case-help-text">No vitals recorded for this case yet.</p>
+                    ) : (
+                      <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+                        {vitalsList.map((vital) => {
+                          const isSelected = String(vital.id) === String(attachedVitalId);
+                          return (
+                            <div
+                              key={vital.id}
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                gap: 12,
+                                padding: 12,
+                                borderRadius: 8,
+                                border: `1px solid ${isSelected ? MINT : "#e2e8f0"}`,
+                                background: isSelected ? "#eefcf8" : "#fff",
+                              }}
+                            >
+                              <div style={{ fontSize: 13 }}>
+                                <strong>
+                                  {formatDate(vital.recorded_at ?? vital.created_at)}
+                                </strong>
+                                <div className="case-help-text">
+                                  BP:{" "}
+                                  {vital.systolic && vital.diastolic
+                                    ? `${vital.systolic}/${vital.diastolic}`
+                                    : "—"}{" "}
+                                  | HR: {vital.heart_rate ?? "—"} | SpO2:{" "}
+                                  {vital.spo2 ?? "—"}% | Temp: {vital.temperature ?? "—"}°F
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className={isSelected ? "secondary-button" : "primary-button"}
+                                disabled={savingAttachments}
+                                onClick={() => handleSelectVital(vital.id)}
+                              >
+                                {isSelected ? "Selected" : "Select"}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                      {attachedVitalId != null && (
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={savingAttachments}
+                          onClick={async () => {
+                            setIsVitalPickerOpen(false);
+                            await persistAttachments(null, attachedLabOrderIds);
+                          }}
+                        >
+                          Clear Selection
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => setIsVitalPickerOpen(false)}
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {isLabOrderPickerOpen && (
+                <div
+                  style={{
+                    position: "fixed",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    overflowX: "hidden",
+                    boxSizing: "border-box",
+                    background: "rgba(0, 0, 0, 0.5)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: 16,
+                    zIndex: 1000,
+                  }}
+                >
+                  <div
+                    className="panel data-panel"
+                    style={{
+                      width: "100%",
+                      maxWidth: 600,
+                      padding: 24,
+                      background: "#fff",
+                      borderRadius: 12,
+                      maxHeight: "85vh",
+                      overflowY: "auto",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: 12,
+                      }}
+                    >
+                      <h2 style={{ margin: 0, fontSize: 18 }}>
+                        Select Lab Orders ({attachedLabOrderIds.length} selected)
+                      </h2>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => {
+                          setPickerError("");
+                          setIsLabOrderPickerOpen(false);
+                        }}
+                        style={{ padding: "4px 8px" }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <p className="case-help-text" style={{ marginBottom: 12 }}>
+                      Select one or more lab orders with distinct test names.
+                    </p>
+
+                    {pickerError && (
+                      <p role="alert" style={{ color: "#d9534f", fontSize: 13, marginBottom: 12 }}>
+                        {pickerError}
+                      </p>
+                    )}
+
+                    {ordersList.length === 0 ? (
+                      <p className="case-help-text">No lab orders available for this case yet.</p>
+                    ) : (
+                      <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+                        {ordersList.map((order) => {
+                          const isChecked = attachedLabOrderIds.some(
+                            (id) => String(id) === String(order.id),
+                          );
+                          return (
+                            <label
+                              key={order.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: 12,
+                                padding: 12,
+                                borderRadius: 8,
+                                border: `1px solid ${isChecked ? MINT : "#e2e8f0"}`,
+                                background: isChecked ? "#eefcf8" : "#fff",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  disabled={savingAttachments}
+                                  onChange={() => handleToggleLabOrder(order)}
+                                />
+                                <div>
+                                  <strong style={{ fontSize: 13 }}>{order.test_name}</strong>
+                                  <div className="case-help-text">
+                                    {order.category || "General"} · {order.priority || "Routine"} ·{" "}
+                                    {order.status || "Draft"}
+                                  </div>
+                                </div>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                      <button
+                        type="button"
+                        className="primary-button"
+                        onClick={() => {
+                          setPickerError("");
+                          setIsLabOrderPickerOpen(false);
+                        }}
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
+
 
           {tab === "Appointments" && (
             <Card title="Appointments">
