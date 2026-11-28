@@ -1115,3 +1115,50 @@ export async function fetchStudentGrading(assignmentId) {
   }
   return payload;
 }
+
+export async function fetchStudentNoteAttachments(noteId) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) {
+    throw new Error("No active session. Please sign in again.");
+  }
+
+  const response = await fetch(
+    `/api/student/notes/${encodeURIComponent(noteId)}/attachments`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.message || "Unable to load note attachments.");
+  }
+  return payload;
+}
+
+export async function saveStudentNoteAttachments(noteId, { vitalId, labOrderIds }) {
+  const accessToken = sessionStorage.getItem("careflow-access-token");
+  if (!accessToken) {
+    throw new Error("No active session. Please sign in again.");
+  }
+
+  const response = await fetch(
+    `/api/student/notes/${encodeURIComponent(noteId)}/attachments`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ vitalId, labOrderIds }),
+    },
+  );
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.message || "Unable to save note attachments.");
+  }
+  return payload;
+}
